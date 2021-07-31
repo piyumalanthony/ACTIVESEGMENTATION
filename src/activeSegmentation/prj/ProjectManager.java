@@ -385,5 +385,7 @@ public class ProjectManager {
 	    projectInfo = project;
 	  }
 
-
+	public Map<String, String> getProjectDir() {
+		return projectDir;
+	}
 }

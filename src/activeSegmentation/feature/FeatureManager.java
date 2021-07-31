@@ -97,7 +97,7 @@ public class FeatureManager  {
 				addClass();
 			}
 		}
-	//	roiman.hide();
+//		roiman.hide();
 	
 		featureMap.put(ProjectType.SEGM, new PixelInstanceCreator(projectInfo));
 		featureMap.put(ProjectType.CLASSIF, new RoiInstanceCreator(projectInfo));
@@ -715,4 +715,11 @@ public class FeatureManager  {
 		return colors;
 	}
 
+	public ProjectManager getProjectManager() {
+		return projectManager;
+	}
+
+	public ProjectInfo getProjectInfo() {
+		return projectInfo;
+	}
 }

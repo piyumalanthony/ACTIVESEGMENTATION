@@ -67,6 +67,8 @@ public class ProjectInfo{
 	private String groundtruth="";
 	
 	private String featureSelection="";
+
+	private int  groundTruthClasses = -1;
 	
 	/*
 	 * JSON ignore
@@ -417,6 +419,13 @@ public class ProjectInfo{
 	public void setPluginPath(List<String> pluginPath) {
 		this.pluginPath = pluginPath;
 	}
-	
+
+	public int getGroundTruthClasses() {
+		return groundTruthClasses;
+	}
+
+	public void setGroundTruthClasses(int groundTruthClasses) {
+		this.groundTruthClasses = groundTruthClasses;
+	}
 }// END
 

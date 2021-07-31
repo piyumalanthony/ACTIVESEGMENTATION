@@ -19,6 +19,7 @@ import activeSegmentation.IEvaluation;
 import activeSegmentation.evaluation.EvaluationMetrics;
 import activeSegmentation.evaluation.EvaluationPanel;
 import activeSegmentation.feature.FeatureManager;
+import activeSegmentation.feature.GroundTruthManager;
 import activeSegmentation.learning.ClassifierManager;
 import activeSegmentation.prj.ProjectManager;
 
@@ -41,6 +42,7 @@ public class Gui implements ASCommon {
 
 	
 	private FeatureManager featureManager;
+	private GroundTruthManager groundTruthManager;
 	private ClassifierManager learningManager;
 	private ProjectManager projectManager;
 	
@@ -50,6 +52,7 @@ public class Gui implements ASCommon {
 		this.projectManager = projectManager;
 		learningManager = new ClassifierManager(this.projectManager);
 		featureManager=new FeatureManager(this.projectManager, this.learningManager);
+		groundTruthManager = new GroundTruthManager(this.projectManager, this.learningManager);
 		
 		prepareGUI();
 	}
@@ -78,7 +81,7 @@ public class Gui implements ASCommon {
 
 		if(event == this.FEATURE_GROUND_TRUTH_BUTTON_PRESSED){
 			if(this.featurePanel == null){
-				new FeaturePanelGroundTruth(featureManager);
+				new FeaturePanelGroundTruth(featureManager, this.projectManager, this.groundTruthManager);
 			}
 		}
 			

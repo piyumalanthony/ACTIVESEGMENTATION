@@ -218,7 +218,7 @@ public class PixelInstanceCreator implements IFeature {
 	 * 
 	 * @param trainingData set of instances to add to
 	 * @param classIndex class index value
-	 * @param sliceNum number of 2d slice being processed
+	 * @param featureStack number of 2d slice being processed
 	 * @param r shape roi
 	 * @return number of instances added
 	 */
@@ -275,11 +275,8 @@ public class PixelInstanceCreator implements IFeature {
 	/**
 	 * Add training samples from a rectangular roi
 	 * 
-	 * @param trainingData set of instances to add to
-	 * @param classIndex class index value
-	 * @param sliceNum number of 2d slice being processed
-	 * @param r shape roi
-	 * @return number of instances added
+	 * @param featureStack set of instances to add to
+
 	 */
 	private Instances addRectangleRoiInstances(
 			ImageStack featureStack) 

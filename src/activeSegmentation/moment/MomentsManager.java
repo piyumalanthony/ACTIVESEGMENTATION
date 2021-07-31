@@ -17,14 +17,7 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import activeSegmentation.ASCommon;
-import activeSegmentation.FilterType;
-import activeSegmentation.IAnnotated;
-import activeSegmentation.LearningType;
-import activeSegmentation.IFilterViz;
-import activeSegmentation.IMoment;
-import activeSegmentation.IFilterManager;
-import activeSegmentation.ProjectType;
+import activeSegmentation.*;
 import activeSegmentation.feature.FeatureManager;
 import activeSegmentation.prj.ProjectInfo;
 import activeSegmentation.prj.ProjectManager;
@@ -241,6 +234,11 @@ public class MomentsManager extends URLClassLoader implements IFilterManager {
 	public Map<String,String> getDefaultFilterSettings(String key){
 		
 		return momentMap.get(key).getDefaultSettings();
+	}
+
+	@Override
+	public IFilter getInstance(String key) {
+		return null;
 	}
 
 

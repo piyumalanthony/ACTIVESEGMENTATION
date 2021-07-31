@@ -1,13 +1,20 @@
 package activeSegmentation.gui;
 
 
+import activeSegmentation.feature.GroundTruthManager;
+import activeSegmentation.prj.ProjectInfo;
+import activeSegmentation.prj.ProjectManager;
 import ij.IJ;
 import ij.ImagePlus;
+import ij.ImageStack;
+import ij.WindowManager;
 import ij.gui.ImageWindow;
 import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
+import ij.plugin.LUT_Editor;
 import ij.process.ImageProcessor;
+import ij.process.ImageStatistics;
 import ij.process.LUT;
 
 import java.awt.AlphaComposite;
@@ -25,11 +32,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Vector;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
@@ -58,7 +63,7 @@ import activeSegmentation.util.GuiUtil;
 
 import static  activeSegmentation.ProjectType.*;
 
-public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
+public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
 
     /**
      *
@@ -66,30 +71,45 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
     private static final long serialVersionUID = 1L;
 
     private FeatureManager featureManager;
-    /** opacity (in %) of the result overlay image */
+    private GroundTruthManager groundTruthManager;
+    private FeatureManager testFeatureManager;
+    ProjectManager projectManager;
+    private boolean isShowColorOverlay = false;
+//    private LUT_Editor lut_editor;
+    /**
+     * opacity (in %) of the result overlay image
+     */
     int overlayOpacity = 33;
-    /** alpha composite for the result overlay image */
+    /**
+     * alpha composite for the result overlay image
+     */
     Composite overlayAlpha = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, overlayOpacity / 100f);
     private ImageOverlay resultOverlay;
     LUT overlayLUT;
-    /** flag to display the overlay image */
-    private boolean showColorOverlay=false;
+    /**
+     * flag to display the overlay image
+     */
+    private boolean showColorOverlay = false;
     ImagePlus classifiedImage;
     // Create overlay LUT
-    byte[] red = new byte[ 256 ];
-    byte[] green = new byte[ 256 ];
-    byte[] blue = new byte[ 256 ];
+    byte[] red = new byte[256];
+    byte[] green = new byte[256];
+    byte[] blue = new byte[256];
 
     private Map<String, JList<String>> exampleList;
     private Map<String, JList<String>> allexampleList;
 
-    /** array of ROI list overlays to paint the transparent ROIs of each class */
-    private Map<String,RoiListOverlay> roiOverlayList;
+    /**
+     * array of ROI list overlays to paint the transparent ROIs of each class
+     */
+    private Map<String, RoiListOverlay> roiOverlayList;
 
-    /** Used only during classification setting*/
-    private Map<String,Integer> predictionResultClassification;
+    /**
+     * Used only during classification setting
+     */
+    private Map<String, Integer> predictionResultClassification;
 
-    final Composite transparency050 = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.50f );
+    final Composite transparency050 = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.50f);
 
     /*
      *  the files must be in the resources/feature folder
@@ -98,40 +118,52 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
     private static final Icon downloadIcon = new ImageIcon(FeaturePanelNew.class.getResource("download.png"));
 
 
-    /** This {@link ActionEvent} is fired when the 'next' button is pressed. */
-    private ActionEvent NEXT_BUTTON_PRESSED = new ActionEvent( this, 0, "Next" );
-    /** This {@link ActionEvent} is fired when the 'previous' button is pressed. */
-    private ActionEvent PREVIOUS_BUTTON_PRESSED = new ActionEvent( this, 1, "Previous" );
-    private ActionEvent ADDCLASS_BUTTON_PRESSED = new ActionEvent( this, 2, "AddClass" );
-    private ActionEvent SAVECLASS_BUTTON_PRESSED= new ActionEvent( this, 3, "SaveLabel" );
-    private ActionEvent DELETE_BUTTON_PRESSED = new ActionEvent( this, 4, "DeleteClass" );
-    private ActionEvent COMPUTE_BUTTON_PRESSED  = new ActionEvent( this, 5, "TRAIN" );
-    private ActionEvent SAVE_BUTTON_PRESSED  = new ActionEvent( this, 6, "SAVEDATA" );
-    private ActionEvent TOGGLE_BUTTON_PRESSED = new ActionEvent( this, 7, "TOGGLE" );
-    private ActionEvent DOWNLOAD_BUTTON_PRESSED = new ActionEvent( this, 8, "DOWNLOAD" );
-    private ActionEvent MASKS_BUTTON_PRESSED = new ActionEvent( this, 8, "MASKS" );
+    /**
+     * This {@link ActionEvent} is fired when the 'next' button is pressed.
+     */
+    private ActionEvent NEXT_BUTTON_PRESSED = new ActionEvent(this, 0, "Next");
+    /**
+     * This {@link ActionEvent} is fired when the 'previous' button is pressed.
+     */
+    private ActionEvent PREVIOUS_BUTTON_PRESSED = new ActionEvent(this, 1, "Previous");
+    //    private ActionEvent ADDCLASS_BUTTON_PRESSED = new ActionEvent( this, 2, "AddClass" );
+    private ActionEvent SAVECLASS_BUTTON_PRESSED = new ActionEvent(this, 3, "SaveLabel");
+    //    private ActionEvent DELETE_BUTTON_PRESSED = new ActionEvent( this, 4, "DeleteClass" );
+    private ActionEvent COMPUTE_BUTTON_PRESSED = new ActionEvent(this, 5, "TRAIN");
+    private ActionEvent SAVE_BUTTON_PRESSED = new ActionEvent(this, 6, "SAVEDATA");
+    private ActionEvent TOGGLE_BUTTON_PRESSED = new ActionEvent(this, 7, "TOGGLE");
+    //    private ActionEvent DOWNLOAD_BUTTON_PRESSED = new ActionEvent( this, 8, "DOWNLOAD" );
+    private ActionEvent MASKS_BUTTON_PRESSED = new ActionEvent(this, 8, "MASKS");
+    private ActionEvent LOAD_GROUND_TRUTH_BUTTON_PRESSED = new ActionEvent(this, 9, "LOAD_GROUND_TRUTH");
+    private ActionEvent LOAD_TEST_DATA_BUTTON_PRESSED = new ActionEvent(this, 10, "LOAD_TEST_DATA");
+    private ActionEvent LUT_BUTTON_PRESSED = new ActionEvent(this, 11, "LUT");
+    private ActionEvent OVERALY_BUTTON_PRESSED = new ActionEvent(this, 12, "OVERLAY");
 
 
     private ImagePlus displayImage;
-    /** Used only in classification setting, in segmentation we get from feature manager*/
+    /**
+     * Used only in classification setting, in segmentation we get from feature manager
+     */
     //private ImagePlus tempClassifiedImage;
-    private JPanel imagePanel,classPanel,roiPanel;
+    private JPanel imagePanel, classPanel, roiPanel;
     private JTextField imageNum;
     private JLabel total;
     private List<JCheckBox> jCheckBoxList;
-    private Map<String,JTextArea> jTextList;
+    private Map<String, JTextArea> jTextList;
     private JComboBox<LearningType> learningType;
     private JFrame frame;
 
     /*
      * constructor
      */
-    public FeaturePanelGroundTruth(FeatureManager featureManager) {
+    public FeaturePanelGroundTruth(FeatureManager featureManager, ProjectManager projectManager, GroundTruthManager groundTruthManager) {
         super(featureManager.getCurrentImage());
         this.featureManager = featureManager;
-        this.displayImage= featureManager.getCurrentImage();
-        this.jCheckBoxList= new ArrayList<JCheckBox>();
-        this.jTextList= new HashMap<String,JTextArea>();
+        this.projectManager = projectManager;
+        this.groundTruthManager = groundTruthManager;
+        this.displayImage = featureManager.getCurrentImage();
+        this.jCheckBoxList = new ArrayList<JCheckBox>();
+        this.jTextList = new HashMap<String, JTextArea>();
         this.exampleList = new HashMap<String, JList<String>>();
         this.allexampleList = new HashMap<String, JList<String>>();
         roiOverlayList = new HashMap<String, RoiListOverlay>();
@@ -147,7 +179,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
         frame.setResizable(false);
         frame.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
 
-        JList<String> frameList= GuiUtil.model();
+        JList<String> frameList = GuiUtil.model();
         frameList.setForeground(Color.BLACK);
 
 
@@ -157,58 +189,58 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
         panel.setBackground(Color.GRAY);
 
         imagePanel = new JPanel();
-        roiPanel= new JPanel();
-        classPanel= new JPanel();
+        roiPanel = new JPanel();
+        classPanel = new JPanel();
 
         /*
          * image panel
          */
         imagePanel.setLayout(new BorderLayout());
 
-        ic=new SimpleCanvas(featureManager.getCurrentImage());
+        ic = new SimpleCanvas(featureManager.getCurrentImage());
         ic.setMinimumSize(new Dimension(IMAGE_CANVAS_DIMENSION, IMAGE_CANVAS_DIMENSION));
         loadImage(displayImage);
         setOverlay();
         imagePanel.setBackground(Color.GRAY);
-        imagePanel.add(ic,BorderLayout.CENTER);
-        imagePanel.setBounds( 10, 10, IMAGE_CANVAS_DIMENSION, IMAGE_CANVAS_DIMENSION );
+        imagePanel.add(ic, BorderLayout.CENTER);
+        imagePanel.setBounds(10, 10, IMAGE_CANVAS_DIMENSION, IMAGE_CANVAS_DIMENSION);
         panel.add(imagePanel);
 
         /*
          * class panel
          */
 
-        classPanel.setBounds(605,20,350,100);
-        classPanel.setPreferredSize(new Dimension(350, 100));
-        classPanel.setBorder(BorderFactory.createTitledBorder("Classes"));
-
-        JScrollPane classScrolPanel = new JScrollPane(classPanel);
-        classScrolPanel.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        classScrolPanel.setBounds(605,20,350,80);
+//        classPanel.setBounds(605,20,350,100);
+//        classPanel.setPreferredSize(new Dimension(350, 100));
+//        classPanel.setBorder(BorderFactory.createTitledBorder("Classes"));
+//
+//        JScrollPane classScrolPanel = new JScrollPane(classPanel);
+//        classScrolPanel.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+//        classScrolPanel.setBounds(605,20,350,80);
         addClassPanel();
-        panel.add(classScrolPanel);
+//        panel.add(classScrolPanel);
 
 
         /*
          * features
          */
-        JPanel features= new JPanel();
-        features.setBounds(605,120,350,100);
+        JPanel features = new JPanel();
+        features.setBounds(605, 20, 350, 100);
         features.setBorder(BorderFactory.createTitledBorder("Learning"));
 
-        addButton(new JButton(), "PREVIOUS",null , 610, 130, 120, 20,features,PREVIOUS_BUTTON_PRESSED,null );
+        addButton(new JButton(), "PREVIOUS", null, 610, 30, 200, 20, features, PREVIOUS_BUTTON_PRESSED, null);
 
-        imageNum= new JTextField();
+        imageNum = new JTextField();
         imageNum.setColumns(5);
-        imageNum.setBounds( 630, 130, 10, 20 );
-        JLabel dasedLine= new JLabel("/");
-        dasedLine.setFont(new Font( "Arial", Font.PLAIN, 15 ));
+        imageNum.setBounds(630, 30, 10, 20);
+        JLabel dasedLine = new JLabel("/");
+        dasedLine.setFont(new Font("Arial", Font.PLAIN, 15));
         dasedLine.setForeground(Color.BLACK);
-        dasedLine.setBounds(  670, 130, 10, 20 );
-        total= new JLabel("Total");
-        total.setFont(new Font( "Arial", Font.PLAIN, 15 ));
+        dasedLine.setBounds(670, 30, 10, 20);
+        total = new JLabel("Total");
+        total.setFont(new Font("Arial", Font.PLAIN, 15));
         total.setForeground(Color.BLACK);
-        total.setBounds( 500, 600, 80, 30);
+        total.setBounds(500, 600, 80, 30);
         imageNum.setText(Integer.toString(featureManager.getCurrentSlice()));
         total.setText(Integer.toString(featureManager.getTotalSlice()));
         features.add(imageNum);
@@ -220,11 +252,11 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
          */
 
         JPanel computePanel = new JPanel();
-        addButton(new JButton(), "Next",null , 800, 130, 80, 20,features,NEXT_BUTTON_PRESSED,null );
-        addButton(new JButton(), "Train",null, 550,550,350,100,computePanel, COMPUTE_BUTTON_PRESSED,null);
-        addButton(new JButton(), "Save",null, 550,550,350,100,computePanel, SAVE_BUTTON_PRESSED,null);
-        addButton(new JButton(), "Overlay",null, 550,550,350,100,computePanel, TOGGLE_BUTTON_PRESSED,null);
-        addButton(new JButton(), "Masks",null, 550,550,350,100,computePanel, MASKS_BUTTON_PRESSED,null);
+        addButton(new JButton(), "Next", null, 800, 130, 80, 20, features, NEXT_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Train", null, 550, 550, 350, 100, computePanel, COMPUTE_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Save", null, 550, 550, 350, 100, computePanel, SAVE_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Overlay", null, 550, 550, 350, 100, computePanel, TOGGLE_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Masks", null, 550, 550, 350, 100, computePanel, MASKS_BUTTON_PRESSED, null);
 
         features.add(computePanel);
         frame.add(features);
@@ -236,12 +268,12 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
         JPanel dataJPanel = new JPanel();
         learningType = new JComboBox<LearningType>(LearningType.values());
         learningType.setVisible(true);
-        learningType.addItemListener( new ItemListener() {
+        learningType.addItemListener(new ItemListener() {
 
             @Override
             public void itemStateChanged(ItemEvent e) {
-                if(featureManager.getProjectType()==ProjectType.CLASSIF) {
-                    if(showColorOverlay) {
+                if (featureManager.getProjectType() == ProjectType.CLASSIF) {
+                    if (showColorOverlay) {
                         updateGui();
                         updateResultOverlay(null);
                     } else
@@ -254,9 +286,9 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
             }
         });
 
-        dataJPanel.setBounds(720,240,100,60);
+        dataJPanel.setBounds(720, 130, 100, 60);
         learningType.setSelectedIndex(0);
-        learningType.setFont( panelFONT );
+        learningType.setFont(panelFONT);
         learningType.setBackground(Color.GRAY);
         learningType.setForeground(Color.WHITE);
         dataJPanel.add(learningType);
@@ -264,45 +296,53 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
 
         panel.add(dataJPanel);
 
-        /*
-         * ROI panel
-         */
-//        roiPanel.setBorder(BorderFactory.createTitledBorder("Regions Of Interest"));
-//        //roiPanel.setPreferredSize(new Dimension(350, 400));
-//        JScrollPane scrollPane = new JScrollPane(roiPanel);
-//        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-//        scrollPane.setBounds(605,300,350,250);
-//        panel.add(scrollPane);
 
+        /*
+        Ground Truth panel
+         */
         JPanel importLabels = new JPanel();
-        importLabels.setBounds(605,300,350,250);
+        importLabels.setBounds(605, 200, 350, 80);
         importLabels.setBorder(BorderFactory.createTitledBorder("Import Ground truth"));
         JFileChooser fc = new JFileChooser();
         fc.setLayout(new BorderLayout());
-        fc.setSize(800,500);
+        fc.setSize(800, 500);
 
-        JButton featureButton = new JButton("Load GroundTruth");
-        JButton testDataButton =  new JButton("Load Test data");
+
+        addButton(new JButton(), "Load Ground Truth", null, 800, 130, 40, 20, importLabels, LOAD_GROUND_TRUTH_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Load Test Data", null, 800, 130, 40, 20, importLabels, LOAD_TEST_DATA_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Show Overaly", null, 800, 130, 40, 20, importLabels, OVERALY_BUTTON_PRESSED, null);
 
         fc.setVisible(true);
         fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.add(featureButton);
-        buttonPanel.add(testDataButton);
+
 
         File labels = new File("label");
-        if(!labels.exists()){
+        if (!labels.exists()) {
             labels.mkdirs();
         }
-        importLabels.add(buttonPanel);
         panel.add(importLabels);
+
+
+        /*
+         * ROI panel
+         */
+        roiPanel.setBorder(BorderFactory.createTitledBorder("class labels"));
+        //roiPanel.setPreferredSize(new Dimension(350, 400));
+        JScrollPane scrollPane = new JScrollPane(roiPanel);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setBounds(605, 290, 350, 250);
+        panel.add(scrollPane);
+
+
         frame.add(panel);
+
+
 
         /*
          *  frame code
          */
         frame.pack();
-        frame.setSize(largeframeWidth,largeframeHight);
+        frame.setSize(largeframeWidth, largeframeHight);
         //frame.setSize(getMaximumSize());
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
@@ -310,26 +350,26 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
 
     }
 
-    private void addClassPanel(){
-        classPanel.removeAll();
+    private void addClassPanel() {
+//        classPanel.removeAll();
         roiPanel.removeAll();
-        jCheckBoxList.clear();
-        jTextList.clear();
-        int classes=featureManager.getNumOfClasses();
-        IJ.log(Integer.toString(classes));
-        if(classes%3==0){
-            int tempSize=classes/3;
-            classPanel.setPreferredSize(new Dimension(340, 80+30*tempSize));
-        }
-        roiPanel.setPreferredSize(new Dimension(350, 175*classes));
-        addButton(new JButton(), "ADD CLASS",null , 630, 20, 130, 20,classPanel,ADDCLASS_BUTTON_PRESSED,null );
-        addButton(new JButton(), "SAVE CLASS",null , 630, 20, 130, 20,classPanel,SAVECLASS_BUTTON_PRESSED,null );
-        addButton(new JButton(), "DELETE CLASS",null , 630, 20, 130, 20,classPanel,DELETE_BUTTON_PRESSED,null );
-        for(String key: featureManager.getClassKeys()){
-            String label=featureManager.getClassLabel(key);
-            Color color= featureManager.getClassColor(key);
-            addClasses(key,label,color);
-            addSidePanel(color,key,label);
+//        jCheckBoxList.clear();
+//        jTextList.clear();
+        int classes = groundTruthManager.getNumOfClasses();
+//        IJ.log(Integer.toString(classes));
+//        if(classes%3==0){
+//            int tempSize=classes/3;
+//            classPanel.setPreferredSize(new Dimension(340, 80+30*tempSize));
+//        }
+        roiPanel.setPreferredSize(new Dimension(350, 175 * classes));
+//        addButton(new JButton(), "ADD CLASS",null , 630, 20, 130, 20,classPanel,ADDCLASS_BUTTON_PRESSED,null );
+//        addButton(new JButton(), "SAVE CLASS",null , 630, 20, 130, 20,classPanel,SAVECLASS_BUTTON_PRESSED,null );
+//        addButton(new JButton(), "DELETE CLASS",null , 630, 20, 130, 20,classPanel,DELETE_BUTTON_PRESSED,null );
+        for (String key : featureManager.getClassKeys()) {
+            String label = featureManager.getClassLabel(key);
+            Color color = featureManager.getClassColor(key);
+//            addClasses(key,label,color);
+            addSidePanel(color, key, label);
         }
     }
 
@@ -337,121 +377,140 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
      * Draw the painted traces on the display image
      */
 
-    private void addSidePanel(Color color,String key,String label){
-        JPanel panel= new JPanel();
-        JList<String> current=GuiUtil.model();
+    private void addSidePanel(Color color, String key, String label) {
+        JPanel panel = new JPanel();
+        JList<String> current = GuiUtil.model();
 
         current.setForeground(color);
-        exampleList.put(key,current);
-        JList<String> all=GuiUtil.model();
+        exampleList.put(key, current);
+        JList<String> all = GuiUtil.model();
         all.setForeground(color);
-        allexampleList.put(key,all);
+        allexampleList.put(key, all);
         RoiListOverlay roiOverlay = new RoiListOverlay();
-        roiOverlay.setComposite( transparency050 );
-        ((OverlayedImageCanvas)ic).addOverlay(roiOverlay);
-        roiOverlayList.put(key,roiOverlay);
-        JPanel buttonPanel= new JPanel();
+        roiOverlay.setComposite(transparency050);
+        ((OverlayedImageCanvas) ic).addOverlay(roiOverlay);
+        roiOverlayList.put(key, roiOverlay);
+        JPanel buttonPanel = new JPanel();
         buttonPanel.setName(key);
-        ActionEvent addbuttonAction= new ActionEvent(buttonPanel, 1,"AddButton");
-        ActionEvent uploadAction= new ActionEvent(buttonPanel, 2,"UploadButton");
-        ActionEvent downloadAction= new ActionEvent(buttonPanel, 3,"DownloadButton");
-        JButton addButton= new JButton();
-        addButton.setName(key);
-        JButton upload= new JButton();
-        upload.setName(key);
-        JButton download= new JButton();
-        download.setName(key);
-        addButton(addButton, label, null, 605,280,350,250, buttonPanel, addbuttonAction, null);
-        addButton(upload, null, uploadIcon, 605,280,350,250, buttonPanel, uploadAction, null);
-        addButton(download, null, downloadIcon, 605,280,350,250, buttonPanel, downloadAction, null);
+        ActionEvent addbuttonAction = new ActionEvent(buttonPanel, 1, "AddButton");
+        ActionEvent uploadAction = new ActionEvent(buttonPanel, 2, "OpenLUT");
+//        ActionEvent downloadAction= new ActionEvent(buttonPanel, 3,"DownloadButton");
+        JCheckBox checkBox = new JCheckBox();
+        checkBox.setName(key);
+        buttonPanel.add(checkBox);
+        JTextArea textArea = new JTextArea();
+        textArea.setName(key);
+        textArea.setText(label);
+        buttonPanel.add(textArea);
+
+        JButton button = new JButton();
+        button.setBackground(color);
+        button.setName(key);
+        ActionEvent colorAction = new ActionEvent(button, color.getRGB(), "ColorButton");
+        addAction(button, colorAction);
+        buttonPanel.add(button);
+
+//        JButton addButton= new JButton();
+//        addButton.setName(key);
+        JButton LUTButton = new JButton();
+        LUTButton.setName(key);
+//        JButton download= new JButton();
+//        download.setName(key);
+//        addButton(addButton, label, null, 605,280,350,250, buttonPanel, addbuttonAction, null);
+        addButton(LUTButton, "open LUT", null, 605, 280, 350, 250, buttonPanel, uploadAction, null);
+//        addButton(download, null, downloadIcon, 605,280,350,250, buttonPanel, downloadAction, null);
         roiPanel.add(buttonPanel);
-        panel.add(GuiUtil.addScrollPanel(exampleList.get(key),null));
-        panel.add(GuiUtil.addScrollPanel(allexampleList.get(key),null));
-        roiPanel.add(panel );
-        exampleList.get(key).addMouseListener(mouseListener);
-        allexampleList.get(key).addMouseListener(mouseListener);
+//        panel.add(GuiUtil.addScrollPanel(exampleList.get(key),null));
+//        panel.add(GuiUtil.addScrollPanel(allexampleList.get(key),null));
+//        roiPanel.add(panel );
+//        exampleList.get(key).addMouseListener(mouseListener);
+//        allexampleList.get(key).addMouseListener(mouseListener);
     }
 
-    private void addClasses(String key , String label, Color color){
-        JCheckBox  checkBox = new JCheckBox();
+    private void addClasses(String key, String label, Color color) {
+        JCheckBox checkBox = new JCheckBox();
         checkBox.setName(key);
         jCheckBoxList.add(checkBox);
-        JTextArea textArea= new JTextArea();
+        JTextArea textArea = new JTextArea();
         textArea.setName(key);
-        textArea.setText(label );
+        textArea.setText(label);
         jTextList.put(key, textArea);
         classPanel.add(checkBox);
         classPanel.add(textArea);
-        JButton button= new JButton();
+        JButton button = new JButton();
         button.setBackground(color);
         button.setName(key);
-        ActionEvent colorAction= new ActionEvent(button, color.getRGB(),"ColorButton");
+        ActionEvent colorAction = new ActionEvent(button, color.getRGB(), "ColorButton");
         addAction(button, colorAction);
         classPanel.add(button);
     }
 
-    private void addAction(JButton button ,final  ActionEvent action){
-        button.addActionListener( new ActionListener()	{
+    private void addAction(JButton button, final ActionEvent action) {
+        button.addActionListener(new ActionListener() {
             @Override
-            public void actionPerformed( final ActionEvent e )	{
+            public void actionPerformed(final ActionEvent e) {
                 doAction(action);
             }
-        } );
+        });
 
     }
 
-    private void loadImage(ImagePlus image){
-        this.displayImage=image;
+    private void loadImage(ImagePlus image) {
+        this.displayImage = image;
         setImage(this.displayImage);
         updateImage(this.displayImage);
     }
 
-    public void validateFrame(){
+    public void validateFrame() {
         frame.invalidate();
         frame.revalidate();
         frame.repaint();
     }
 
-    public void doAction( final ActionEvent event ) {
-        if(event== ADDCLASS_BUTTON_PRESSED){
-            featureManager.addClass();
-            addClassPanel();
-            validateFrame();
-            updateGui();
-        } // end if
-        if(event==DELETE_BUTTON_PRESSED){
-
-            System.out.println(featureManager.getNumOfClasses());
-            System.out.println(jCheckBoxList.size());
-            int totalDel=0;
-
-            for (JCheckBox checkBox : jCheckBoxList)
-                if (checkBox.isSelected())
-                    totalDel++;
-
-            if(featureManager.getNumOfClasses()-totalDel<2)
-                JOptionPane.showMessageDialog(null, "There should be minimum two classes");
-            else {
-                for (JCheckBox checkBox : jCheckBoxList)
-                    if (checkBox.isSelected())
-                        featureManager.deleteClass(checkBox.getName());
-                addClassPanel();
-                validateFrame();
-                updateGui();
+    public void doAction(final ActionEvent event) {
+        if(event== OVERALY_BUTTON_PRESSED){
+            isShowColorOverlay = !isShowColorOverlay;
+            if (isShowColorOverlay) {
+                List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+                updateResultOverlayForGroundTruth(groundTruthImages.get(featureManager.getCurrentSlice() - 1));
+            } else {
+                resultOverlay.setImage(null);
+                displayImage.updateAndDraw();
             }
-
         } // end if
+//        if(event==DELETE_BUTTON_PRESSED){
+//
+//            System.out.println(featureManager.getNumOfClasses());
+//            System.out.println(jCheckBoxList.size());
+//            int totalDel=0;
+//
+//            for (JCheckBox checkBox : jCheckBoxList)
+//                if (checkBox.isSelected())
+//                    totalDel++;
+//
+//            if(featureManager.getNumOfClasses()-totalDel<2)
+//                JOptionPane.showMessageDialog(null, "There should be minimum two classes");
+//            else {
+//                for (JCheckBox checkBox : jCheckBoxList)
+//                    if (checkBox.isSelected())
+//                        featureManager.deleteClass(checkBox.getName());
+//                addClassPanel();
+//                validateFrame();
+//                updateGui();
+//            }
 
-        if(event==SAVE_BUTTON_PRESSED){
+//        } // end if
+
+        if (event == SAVE_BUTTON_PRESSED) {
             featureManager.saveFeatureMetadata();
             JOptionPane.showMessageDialog(null, "Successfully saved regions of interest");
         } //end if
 
-        if(event==SAVECLASS_BUTTON_PRESSED){
+        if (event == SAVECLASS_BUTTON_PRESSED) {
             for (JCheckBox checkBox : jCheckBoxList) {
                 //System.out.println(checkBox.getText());
-                String key=checkBox.getName();
-                featureManager.setClassLabel(key,jTextList.get(key).getText() );
+                String key = checkBox.getName();
+                featureManager.setClassLabel(key, jTextList.get(key).getText());
 
             }
             addClassPanel();
@@ -459,53 +518,57 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
             updateGui();
         } // end if
 
-        if(event == PREVIOUS_BUTTON_PRESSED){
-            ImagePlus image=featureManager.getPreviousImage();
+        if (event == PREVIOUS_BUTTON_PRESSED) {
+            ImagePlus image = featureManager.getPreviousImage();
 //            image.getAllStatistics();
             imageNum.setText(Integer.toString(featureManager.getCurrentSlice()));
             loadImage(image);
+            List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
 
-            if (showColorOverlay){
-                if(featureManager.getProjectType()==ProjectType.CLASSIF)
+            if (showColorOverlay) {
+                if (featureManager.getProjectType() == ProjectType.CLASSIF)
                     classifiedImage = null;
                 else
-                    classifiedImage=featureManager.getClassifiedImage();
+                    classifiedImage = featureManager.getClassifiedImage();
                 updateResultOverlay(classifiedImage);
             }
 
             // force limit size of image window
-            if(ic.getWidth()>IMAGE_CANVAS_DIMENSION) {
-                int x_centre = ic.getWidth()/2+ic.getX();
-                int y_centre = ic.getHeight()/2+ic.getY();
-                ic.zoomIn(x_centre,y_centre);
+            if (ic.getWidth() > IMAGE_CANVAS_DIMENSION) {
+                int x_centre = ic.getWidth() / 2 + ic.getX();
+                int y_centre = ic.getHeight() / 2 + ic.getY();
+                ic.zoomIn(x_centre, y_centre);
             }
             updateGui();
+            updateResultOverlayForGroundTruth(groundTruthImages.get(featureManager.getCurrentSlice()-1));
         } // end if
 
-        if(event==NEXT_BUTTON_PRESSED  ){
-            ImagePlus image=featureManager.getNextImage();
+        if (event == NEXT_BUTTON_PRESSED) {
+            ImagePlus image = featureManager.getNextImage();
             imageNum.setText(Integer.toString(featureManager.getCurrentSlice()));
             loadImage(image);
-            if (showColorOverlay){
-                if(featureManager.getProjectType()==ProjectType.CLASSIF)
+            List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+            if (showColorOverlay) {
+                if (featureManager.getProjectType() == ProjectType.CLASSIF)
                     classifiedImage = null;
                 else
-                    classifiedImage=featureManager.getClassifiedImage();
+                    classifiedImage = featureManager.getClassifiedImage();
                 updateResultOverlay(classifiedImage);
             }
 
             // force limit size of image window
-            if(ic.getWidth()>IMAGE_CANVAS_DIMENSION) {
-                int x_centre = ic.getWidth()/2+ic.getX();
-                int y_centre = ic.getHeight()/2+ic.getY();
-                ic.zoomIn(x_centre,y_centre);
+            if (ic.getWidth() > IMAGE_CANVAS_DIMENSION) {
+                int x_centre = ic.getWidth() / 2 + ic.getX();
+                int y_centre = ic.getHeight() / 2 + ic.getY();
+                ic.zoomIn(x_centre, y_centre);
             }
             //imagePanel.add(ic);
             updateGui();
+            updateResultOverlayForGroundTruth(groundTruthImages.get(featureManager.getCurrentSlice()-1));
         } // end if
 
-        if(event==COMPUTE_BUTTON_PRESSED){
-            if(featureManager.getProjectType()==ProjectType.CLASSIF) {
+        if (event == COMPUTE_BUTTON_PRESSED) {
+            if (featureManager.getProjectType() == ProjectType.CLASSIF) {
                 // it means new round of training, so set result setting to false
                 showColorOverlay = false;
                 // removing previous markings and reset things
@@ -522,70 +585,106 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
 
             //segmentation setting
             else {
-                classifiedImage=featureManager.compute();
+                classifiedImage = featureManager.compute();
             }
             IJ.log("compute");
 
             toggleOverlay();
         } //end if
 
-        if(event==TOGGLE_BUTTON_PRESSED){
+        if (event == TOGGLE_BUTTON_PRESSED) {
             toggleOverlay();
         } // end if
 
-        if(event==DOWNLOAD_BUTTON_PRESSED){
+//        if(event==DOWNLOAD_BUTTON_PRESSED){
+//
+//            ImagePlus image=featureManager.stackedClassifiedImage();
+//            image.show();
+//            //FileSaver saver= new FileSaver(image);
+//            //saver.saveAsTiff();
+//        } //end if
 
-            ImagePlus image=featureManager.stackedClassifiedImage();
-            image.show();
-            //FileSaver saver= new FileSaver(image);
-            //saver.saveAsTiff();
-        } //end if
-
-        if(event==MASKS_BUTTON_PRESSED){
+        if (event == MASKS_BUTTON_PRESSED) {
             System.out.println("masks ");
-            if (classifiedImage==null) {
-                classifiedImage=featureManager.compute();
+            if (classifiedImage == null) {
+                classifiedImage = featureManager.compute();
             }
             classifiedImage.show();
 
         } //end if
 
-        if(event.getActionCommand()== "ColorButton"){
-            String key=((Component)event.getSource()).getName();
-            Color c;
-            c = JColorChooser.showDialog( new JFrame(),
-                    "CLASS COLOR", featureManager.getClassColor(key));
+        if (event == LOAD_GROUND_TRUTH_BUTTON_PRESSED) {
+            System.out.println("Loading ground truth.... ");
+            JFileChooser fileChooser = new JFileChooser();
 
-            ((Component)event.getSource()).setBackground(c);
-            featureManager.updateColor(key, c);
+            // For Directory
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+            fileChooser.setAcceptAllFileFilterUsed(false);
+            int rVal = fileChooser.showOpenDialog(null);
+            if (rVal == JFileChooser.APPROVE_OPTION) {
+                String imageDir = fileChooser.getSelectedFile().toString();
+                loadImageStack(imageDir, this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+                List<ImagePlus> images = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+                String message = String.format("Successfully loaded the ground truth images!\n Num of Slices loaded: %d \n Bit depth: %d \n Images height: %d \n Images Width: %d ", images.size(), images.get(0).getBitDepth(), images.get(0).getHeight(), images.get(0).getWidth());
+                JOptionPane.showMessageDialog(null, message);
+
+                updateResultOverlayForGroundTruth(images.get(featureManager.getCurrentSlice()-1));
+                System.out.println(images.toString());
+                long[] hist = calculateGroundTruthClasses(images);
+                Map<String, Integer> histData = getGroundTruthClassDetails(hist);
+                this.groundTruthManager.setPixelClasses(histData);
+                this.groundTruthManager.setNumClasses(histData.size());
+
+            }
             updateGui();
-        }// end if
 
-        if(event.getActionCommand()== "AddButton"){
-            String key=((Component)event.getSource()).getName();
-            final Roi r = displayImage.getRoi();
-            if (null == r)
-                return;
-            displayImage.killRoi();
+        } //end if
 
-            if(featureManager.addExample(key,r,learningType.getSelectedItem().toString(),featureManager.getCurrentSlice()))
-                updateGui();
-            else
-                JOptionPane.showMessageDialog(null, "Other class already contain roi");
+
+        if (event == LOAD_TEST_DATA_BUTTON_PRESSED) {
+            System.out.println("Loading testing images.... ");
+            JFileChooser fileChooser = new JFileChooser();
+
+            // For Directory
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+            fileChooser.setAcceptAllFileFilterUsed(false);
+            int rVal = fileChooser.showOpenDialog(null);
+            if (rVal == JFileChooser.APPROVE_OPTION) {
+                String imageDir = fileChooser.getSelectedFile().toString();
+                loadImageStack(imageDir, this.featureManager.getProjectManager().getProjectDir().get(ASCommon.TESTIMAGESDIR));
+                JOptionPane.showMessageDialog(null, "Successfully loaded the testing images!");
+
+
+//                System.out.println(image.toString());
+//                long[] hist = calculateGroundTruthClasses(image);
+//                Map<Integer, Long> histData = getGroundTruthClassDetails(hist);
+            }
 
 
         } //end if
 
-        if(event.getActionCommand()== "UploadButton"){
-            String key=((Component)event.getSource()).getName();
-            uploadExamples(key);
-            updateGui();
-        }//end if
+        if (event == LUT_BUTTON_PRESSED) {
 
-        if(event.getActionCommand()== "DownloadButton"){
-            String key=((Component)event.getSource()).getName();
-            downloadRois(key);
+            LUT_Editor lut_editor1 = new LUT_Editor();
+            lut_editor1.run("");
+
         }
+
+        if (event.getActionCommand() == "ColorButton") {
+            String key = ((Component) event.getSource()).getName();
+            Color c;
+            c = JColorChooser.showDialog(new JFrame(),
+                    "CLASS COLOR", featureManager.getClassColor(key));
+
+            ((Component) event.getSource()).setBackground(c);
+            featureManager.updateColor(key, c);
+            updateGui();
+        }// end if
+
+        if (event.getActionCommand() == "OpenLUT") {
+            LUTLabelUI lut_editor1 = new LUTLabelUI();
+            lut_editor1.run("");
+        }//end if
 
 
     }
@@ -594,14 +693,12 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
     /**
      * Toggle between overlay and original image with markings
      */
-    private void toggleOverlay()
-    {
-        if(featureManager.getProjectType()== ProjectType.SEGM) {
+    private void toggleOverlay() {
+        if (featureManager.getProjectType() == ProjectType.SEGM) {
             showColorOverlay = !showColorOverlay;
-            if (showColorOverlay && (null != classifiedImage)){
+            if (showColorOverlay && (null != classifiedImage)) {
                 updateResultOverlay(classifiedImage);
-            }
-            else{
+            } else {
                 resultOverlay.setImage(null);
                 displayImage.updateAndDraw();
             }
@@ -611,7 +708,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
         else {
             showColorOverlay = !showColorOverlay;
             // user wants to see results
-            if(showColorOverlay) {
+            if (showColorOverlay) {
                 updateResultOverlay(classifiedImage);
             }
 
@@ -628,9 +725,8 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
         }
     }
 
-    public void updateResultOverlay(ImagePlus classifiedImage)
-    {
-        if(featureManager.getProjectType()==ProjectType.SEGM) {
+    public void updateResultOverlay(ImagePlus classifiedImage) {
+        if (featureManager.getProjectType() == ProjectType.SEGM) {
             ImageProcessor overlay = classifiedImage.getProcessor().duplicate();
             overlay = overlay.convertToByte(false);
             setLut(featureManager.getColors());
@@ -639,7 +735,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
             displayImage.updateAndDraw();
         }
 
-        if(featureManager.getProjectType()== ProjectType.CLASSIF) {
+        if (featureManager.getProjectType() == ProjectType.CLASSIF) {
             // remove previous overlay
             displayImage.setOverlay(null);
             displayImage.updateAndDraw();
@@ -649,14 +745,14 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
             Font font = new Font("Arial", Font.PLAIN, 38);
             Overlay overlay = new Overlay();
             ArrayList<Roi> rois;
-            for(String classKey:featureManager.getClassKeys()) {
+            for (String classKey : featureManager.getClassKeys()) {
                 //returns rois of current image slice of given class, current slice is updated internally
-                rois = (ArrayList<Roi>) featureManager.getExamples(classKey,learningType.getSelectedItem().toString(), featureManager.getCurrentSlice());
-                if(rois!=null) {
-                    for (Roi roi:rois) {
+                rois = (ArrayList<Roi>) featureManager.getExamples(classKey, learningType.getSelectedItem().toString(), featureManager.getCurrentSlice());
+                if (rois != null) {
+                    for (Roi roi : rois) {
                         int pred = predictionResultClassification.get(roi.getName());
-                        TextRoi textroi = new TextRoi(roi.getBounds().x,roi.getBounds().y,
-                                roi.getFloatWidth(),roi.getFloatHeight(),Integer.toString(pred),font);
+                        TextRoi textroi = new TextRoi(roi.getBounds().x, roi.getBounds().y,
+                                roi.getFloatWidth(), roi.getFloatHeight(), Integer.toString(pred), font);
                         textroi.setFillColor(roi.getFillColor());
                         //textroi.setNonScalable(true);
                         textroi.setPosition(currentSlice);
@@ -670,67 +766,79 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
         }
     }
 
-    public void setLut(List<Color> colors ){
-        int i=0;
-        for(Color color: colors){
+    public void setLut(List<Color> colors) {
+        int i = 0;
+        for (Color color : colors) {
             red[i] = (byte) color.getRed();
             green[i] = (byte) color.getGreen();
             blue[i] = (byte) color.getBlue();
             i++;
         }
+        blue[255] = -1;
         overlayLUT = new LUT(red, green, blue);
     }
 
-    private void updateGui(){
-        try{
-//            drawExamples();
+    private void updateGui() {
+        try {
+            drawExamples();
             updateExampleLists();
             //updateallExampleLists();
             ic.setMinimumSize(new Dimension(IMAGE_CANVAS_DIMENSION, IMAGE_CANVAS_DIMENSION));
             ic.repaint();
-        }catch(Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void updateExampleLists()	{
-        LearningType type=(LearningType) learningType.getSelectedItem();
-        for(String key:featureManager.getClassKeys()){
+    private void drawExamples() {
+        for (String key : featureManager.getClassKeys()) {
+            ArrayList<Roi> rois = (ArrayList<Roi>) featureManager.
+                    getExamples(key, learningType.getSelectedItem().toString(), featureManager.getCurrentSlice());
+            roiOverlayList.get(key).setColor(featureManager.getClassColor(key));
+            roiOverlayList.get(key).setRoi(rois);
+            //System.out.println("roi draw"+ key);
+        }
+        getImagePlus().updateAndDraw();
+    }
+
+    private void updateExampleLists() {
+        LearningType type = (LearningType) learningType.getSelectedItem();
+        for (String key : featureManager.getClassKeys()) {
             exampleList.get(key).removeAll();
             Vector<String> listModel = new Vector<String>();
 
-            for(int j=0; j<featureManager.getRoiListSize(key, learningType.getSelectedItem().toString(),featureManager.getCurrentSlice()); j++){
-                listModel.addElement(key+ " "+ j + " " +
-                        featureManager.getCurrentSlice()+" "+type.getLearningType());
+            for (int j = 0; j < featureManager.getRoiListSize(key, learningType.getSelectedItem().toString(), featureManager.getCurrentSlice()); j++) {
+                listModel.addElement(key + " " + j + " " +
+                        featureManager.getCurrentSlice() + " " + type.getLearningType());
             }
             exampleList.get(key).setListData(listModel);
             exampleList.get(key).setForeground(featureManager.getClassColor(key));
         }
     }
 
-    private  MouseListener mouseListener = new MouseAdapter() {
+    private MouseListener mouseListener = new MouseAdapter() {
         public void mouseClicked(MouseEvent mouseEvent) {
-            JList<?>  theList = ( JList<?>) mouseEvent.getSource();
+            JList<?> theList = (JList<?>) mouseEvent.getSource();
             if (mouseEvent.getClickCount() == 1) {
                 int index = theList.getSelectedIndex();
 
                 if (index >= 0) {
-                    String item =theList.getSelectedValue().toString();
-                    String[] arr= item.split(" ");
+                    String item = theList.getSelectedValue().toString();
+                    String[] arr = item.split(" ");
                     //System.out.println("Class Id"+ arr[0].trim());
                     //int sliceNum=Integer.parseInt(arr[2].trim());
-                    showSelected( arr[0].trim(),index);
+                    showSelected(arr[0].trim(), index);
 
                 }
             }
 
             if (mouseEvent.getClickCount() == 2) {
                 int index = theList.getSelectedIndex();
-                String type= learningType.getSelectedItem().toString();
+                String type = learningType.getSelectedItem().toString();
                 if (index >= 0) {
-                    String item =theList.getSelectedValue().toString();
+                    String item = theList.getSelectedValue().toString();
                     //System.out.println("ITEM : "+ item);
-                    String[] arr= item.split(" ");
+                    String[] arr = item.split(" ");
                     //int classId= featureManager.getclassKey(arr[0].trim())-1;
                     featureManager.deleteExample(arr[0], Integer.parseInt(arr[1].trim()), type);
                     updateGui();
@@ -742,43 +850,42 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
 
     /**
      * Select a list and deselect the others
-     * @param e item event (originated by a list)
-     * @param i list index
+     *
+     * @param classKey item event (originated by a list)
+     * @param index    list index
      */
-    private void showSelected(String classKey,int index ){
+    private void showSelected(String classKey, int index) {
         updateGui();
 
 
         displayImage.setColor(Color.YELLOW);
-        String type= learningType.getSelectedItem().toString();
+        String type = learningType.getSelectedItem().toString();
         //System.out.println(classKey+"--"+index+"---"+type);
-        final Roi newRoi = featureManager.getRoi(classKey, index,type);
+        final Roi newRoi = featureManager.getRoi(classKey, index, type);
         //System.out.println(newRoi);
         newRoi.setImage(displayImage);
         displayImage.setRoi(newRoi);
         displayImage.updateAndDraw();
     }
-    private JButton addButton(final JButton button ,final String label, final Icon icon, final int x,
+
+    private JButton addButton(final JButton button, final String label, final Icon icon, final int x,
                               final int y, final int width, final int height,
-                              JComponent panel, final ActionEvent action,final Color color )
-    {
+                              JComponent panel, final ActionEvent action, final Color color) {
         panel.add(button);
-        button.setText( label );
-        button.setIcon( icon );
-        button.setFont( panelFONT );
+        button.setText(label);
+        button.setIcon(icon);
+        button.setFont(panelFONT);
         button.setBorderPainted(false);
         button.setFocusPainted(false);
         button.setBackground(new Color(192, 192, 192));
         button.setForeground(Color.WHITE);
-        if(color!=null){
+        if (color != null) {
             button.setBackground(color);
         }
-        button.setBounds( x, y, width, height );
-        button.addActionListener( new ActionListener()
-        {
+        button.setBounds(x, y, width, height);
+        button.addActionListener(new ActionListener() {
             @Override
-            public void actionPerformed( final ActionEvent e )
-            {
+            public void actionPerformed(final ActionEvent e) {
                 //System.out.println(e.toString());
                 doAction(action);
             }
@@ -787,39 +894,184 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon  {
         return button;
     }
 
-    private void setOverlay(){
+    private void setOverlay() {
         resultOverlay = new ImageOverlay();
-        resultOverlay.setComposite( overlayAlpha );
-        ((OverlayedImageCanvas)ic).addOverlay(resultOverlay);
+        resultOverlay.setComposite(overlayAlpha);
+        ((OverlayedImageCanvas) ic).addOverlay(resultOverlay);
     }
 
     private void downloadRois(String key) {
-        String type=learningType.getSelectedItem().toString();
+        String type = learningType.getSelectedItem().toString();
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
         fileChooser.setAcceptAllFileFilterUsed(false);
         int rVal = fileChooser.showOpenDialog(null);
         if (rVal == JFileChooser.APPROVE_OPTION) {
-            String name=fileChooser.getSelectedFile().toString();
-            if(!name.endsWith(".zip")){
+            String name = fileChooser.getSelectedFile().toString();
+            if (!name.endsWith(".zip")) {
                 name = name + ".zip";
             }
 
-            featureManager.saveExamples(name, key,type, featureManager.getCurrentSlice());
-        }
-    }
-
-    private void uploadExamples(String key) {
-        String type=learningType.getSelectedItem().toString();
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-        fileChooser.setAcceptAllFileFilterUsed(false);
-        int rVal = fileChooser.showOpenDialog(null);
-        if (rVal == JFileChooser.APPROVE_OPTION) {
-            featureManager.uploadExamples(fileChooser.getSelectedFile().toString(),key,type, featureManager.getCurrentSlice());
+            featureManager.saveExamples(name, key, type, featureManager.getCurrentSlice());
         }
     }
 
 
+    /*
+    Image loading and statistics calculation
+     */
+    private void createImages(String image, ImagePlus currentImage, String dir) {
+        String format = image.substring(image.lastIndexOf("."));
+        String folder = image.substring(0, image.lastIndexOf("."));
+        if (currentImage.getStackSize() > 0) {
+            createStackImage(currentImage, format, folder, dir);
+        } else {
+            String imgDir = dir + folder;
+//            createDirectory(imgDir);
+            IJ.saveAs(currentImage, format, imgDir);
+
+        }
+
+    }
+
+    private void createStackImage(ImagePlus image, String format, String folder, String directory) {
+        IJ.log("createStack");
+        IJ.log(format);
+        for (int i = 1; i <= image.getStackSize(); i++) {
+            ImageProcessor processor = image.getStack().getProcessor(i);
+            String title = folder + i;
+            IJ.log(folder);
+            IJ.log(title);
+//            createDirectory(directory);
+            IJ.saveAs(new ImagePlus(title, processor), format, directory + title);
+        }
+        IJ.log("createStackdone");
+    }
+
+    private boolean createDirectory(String project) {
+        File file = new File(project);
+        if (!file.exists()) {
+            file.mkdirs();
+        }
+        return true;
+    }
+
+    private HashMap<Integer, long[]> generateClassStatistics(ImagePlus image) {
+        HashMap<Integer, long[]> statistics = new HashMap<>();
+        for (int i = 1; i <= image.getStackSize(); i++) {
+            ImageProcessor processor = image.getStack().getProcessor(i);
+            ImageStatistics imgStat = processor.getStatistics();
+            statistics.put(i, imgStat.getHistogram());
+        }
+        IJ.log("Histogram calculated");
+        return statistics;
+
+    }
+
+    private long[] calculateGroundTruthClasses(List<ImagePlus> images) {
+        long[] histCommon = new long[256];
+        for (ImagePlus image: images) {
+            ImageProcessor processor = image.getProcessor();
+            long[] hist = processor.getStats().getHistogram();
+            for (int j = 0; j < 256; j++) {
+                histCommon[j] += hist[j];
+            }
+        }
+        return histCommon;
+    }
+
+    private Map<String, Integer> getGroundTruthClassDetails(long[] hist) {
+        Map<String, Integer> classInfo = new HashMap<>();
+        Integer labelIndex = 1;
+        for (int i = 0; i < 256; i++) {
+            if (hist[i] != 0) {
+                classInfo.put("label"+ labelIndex.toString(), i);
+            }
+        }
+        return classInfo;
+    }
+
+
+    private void loadImageStack(String imageDir, String toDir) {
+        if (imageDir.endsWith(".tif") || imageDir.endsWith(".tiff")) {
+            ImagePlus imagePlus = IJ.openImage(imageDir);
+            createImages(imagePlus.getTitle(), imagePlus, toDir);
+        } else {
+            List<String> images = loadImages(imageDir);
+            for (String image : images) {
+                ImagePlus currentImage = IJ.openImage(imageDir + "/" + image);
+                createImages(currentImage.getTitle(), currentImage, toDir);
+
+            }
+        }
+
+    }
+
+    private List<String> loadImages(String dir) {
+        List<String> imageList = new ArrayList<>();
+        File folder = new File(dir);
+        File[] images = sortImages(folder.listFiles());
+
+        for (File file : images) {
+            if (file.isFile()) {
+                imageList.add(file.getName());
+            }
+        }
+        return imageList;
+    }
+
+    private File[] sortImages(File[] images) {
+        final Pattern p = Pattern.compile("\\d+");
+        Arrays.sort(images, new Comparator<File>() {
+
+            @Override
+            public int compare(File o1, File o2) {
+                Matcher m = p.matcher(o1.getName());
+                Integer number1 = null;
+                if (!m.find()) {
+                    return o1.getName().compareTo(o2.getName());
+                } else {
+                    Integer number2 = null;
+                    number1 = Integer.parseInt(m.group());
+                    m = p.matcher(o2.getName());
+                    if (!m.find()) {
+                        return o1.getName().compareTo(o2.getName());
+                    } else {
+                        number2 = Integer.parseInt(m.group());
+                        int comparison = number1.compareTo(number2);
+                        if (comparison != 0) {
+                            return comparison;
+                        } else {
+                            return o1.getName().compareTo(o2.getName());
+                        }
+
+                    }
+                }
+            }
+        });
+        return images;
+    }
+
+    private List<ImagePlus> loadSavedImages(String dir) {
+        List<String> images = loadImages(dir);
+        List<ImagePlus> imageStack = new ArrayList<>();
+        for (String image : images) {
+            imageStack.add(new ImagePlus(dir+"/"+image));
+        }
+        return imageStack;
+
+    }
+
+    public void updateResultOverlayForGroundTruth(ImagePlus classifiedImage)
+    {
+        if(featureManager.getProjectType()==ProjectType.SEGM) {
+            ImageProcessor overlay = classifiedImage.getProcessor().duplicate();
+            overlay = overlay.convertToByte(false);
+            setLut(featureManager.getColors());
+            overlay.setColorModel(overlayLUT);
+            resultOverlay.setImage(overlay);
+            displayImage.updateAndDraw();
+        }
+    }
 
 }

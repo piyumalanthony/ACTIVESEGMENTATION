@@ -320,7 +320,6 @@ public class FeaturePanelNew extends ImageWindow implements ASCommon  {
 			roiOverlayList.get(key).setRoi(rois);
 			//System.out.println("roi draw"+ key);
 		}
-
 		getImagePlus().updateAndDraw();
 	}
 	private void addSidePanel(Color color,String key,String label){
@@ -727,8 +726,8 @@ public class FeaturePanelNew extends ImageWindow implements ASCommon  {
 
 	/**
 	 * Select a list and deselect the others
-	 * @param e item event (originated by a list)
-	 * @param i list index
+	 * @param classKey item event (originated by a list)
+	 * @param index list index
 	 */
 	private void showSelected(String classKey,int index ){
 		updateGui();
