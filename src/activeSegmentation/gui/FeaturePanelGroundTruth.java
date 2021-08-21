@@ -2,16 +2,12 @@ package activeSegmentation.gui;
 
 
 import activeSegmentation.feature.GroundTruthManager;
-import activeSegmentation.prj.ProjectInfo;
-import activeSegmentation.prj.ProjectManager;
+import activeSegmentation.prj.*;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
-import ij.gui.ImageWindow;
-import ij.gui.Overlay;
-import ij.gui.Roi;
-import ij.gui.TextRoi;
+import ij.gui.*;
 import ij.plugin.LUT_Editor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
@@ -60,6 +56,7 @@ import activeSegmentation.LearningType;
 import activeSegmentation.ProjectType;
 import activeSegmentation.feature.FeatureManager;
 import activeSegmentation.util.GuiUtil;
+import org.w3c.dom.ls.LSInput;
 
 import static  activeSegmentation.ProjectType.*;
 
@@ -75,6 +72,15 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
     private FeatureManager testFeatureManager;
     ProjectManager projectManager;
     private boolean isShowColorOverlay = false;
+    private Random rand = new Random();
+    private Map<String, GroundTruthClassInfo> groundInfoClassList = new HashMap<>();
+    private Map<Integer, GroundTruthClassInfo> groundTruthClassInfoIndexedMap = new HashMap<>();
+    private Map<Integer, GroundTruthClassInfo> groundTruthClassInfoPixelIndexedMap = new HashMap<>();
+    private List<String> groundTruthImages = new ArrayList<>();
+    private List<String> testingImages = new ArrayList<>();
+    private ImagePlus overlayImage;
+    private Map<String, String> imageToGroundTruthMap = new HashMap<>();
+    private int customNumOfTrainingInstances = 0;
 //    private LUT_Editor lut_editor;
     /**
      * opacity (in %) of the result overlay image
@@ -138,6 +144,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
     private ActionEvent LOAD_TEST_DATA_BUTTON_PRESSED = new ActionEvent(this, 10, "LOAD_TEST_DATA");
     private ActionEvent LUT_BUTTON_PRESSED = new ActionEvent(this, 11, "LUT");
     private ActionEvent OVERALY_BUTTON_PRESSED = new ActionEvent(this, 12, "OVERLAY");
+    private ActionEvent TRAINING_INSTANCE_BUTTON_PRESSED = new ActionEvent(this, 12, "TRAINING_INSTANCE");
 
 
     private ImagePlus displayImage;
@@ -147,7 +154,8 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
     //private ImagePlus tempClassifiedImage;
     private JPanel imagePanel, classPanel, roiPanel;
     private JTextField imageNum;
-    private JLabel total;
+    private JTextField numOfTrainingInstances;
+    private JLabel total,totalForTrainingInstances;
     private List<JCheckBox> jCheckBoxList;
     private Map<String, JTextArea> jTextList;
     private JComboBox<LearningType> learningType;
@@ -170,6 +178,9 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         //tempClassifiedImage = new ImagePlus();
         this.setVisible(false);
         showPanel();
+        setGroundTruthFeatureMetadata();
+        addGroundTruthClassPanel(groundInfoClassList);
+        validateFrame();
     }
 
 
@@ -217,7 +228,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
 //        JScrollPane classScrolPanel = new JScrollPane(classPanel);
 //        classScrolPanel.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 //        classScrolPanel.setBounds(605,20,350,80);
-        addClassPanel();
+//        addClassPanel();
 //        panel.add(classScrolPanel);
 
 
@@ -225,7 +236,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
          * features
          */
         JPanel features = new JPanel();
-        features.setBounds(605, 20, 350, 100);
+        features.setBounds(605, 20, 350, 135);
         features.setBorder(BorderFactory.createTitledBorder("Learning"));
 
         addButton(new JButton(), "PREVIOUS", null, 610, 30, 200, 20, features, PREVIOUS_BUTTON_PRESSED, null);
@@ -240,26 +251,58 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         total = new JLabel("Total");
         total.setFont(new Font("Arial", Font.PLAIN, 15));
         total.setForeground(Color.BLACK);
-        total.setBounds(500, 600, 80, 30);
+        total.setBounds(690, 30, 80, 30);
         imageNum.setText(Integer.toString(featureManager.getCurrentSlice()));
         total.setText(Integer.toString(featureManager.getTotalSlice()));
         features.add(imageNum);
         features.add(dasedLine);
         features.add(total);
 
+        addButton(new JButton(), "Next", null, 800, 30, 80, 20, features, NEXT_BUTTON_PRESSED, null);
+
+        JPanel trainingInstancePanel = new JPanel();
+
+        JLabel  trainingInstancePanelLabel = new JLabel("Set number of training instances:");
+        trainingInstancePanelLabel.setFont(new Font("Arial", Font.ITALIC, 11));
+        trainingInstancePanelLabel.setForeground(Color.BLACK);
+        trainingInstancePanelLabel.setBounds(590, 80, 200, 20);
+        numOfTrainingInstances = new JTextField();
+        numOfTrainingInstances.setColumns(5);
+        numOfTrainingInstances.setBounds(630, 80, 10, 20);
+        JLabel dasedLineForTrainingInstances = new JLabel("/");
+        dasedLineForTrainingInstances.setFont(new Font("Arial", Font.PLAIN, 15));
+        dasedLineForTrainingInstances.setForeground(Color.BLACK);
+        dasedLineForTrainingInstances.setBounds(670, 80, 10, 20);
+        totalForTrainingInstances = new JLabel("Total");
+        totalForTrainingInstances.setFont(new Font("Arial", Font.PLAIN, 15));
+        totalForTrainingInstances.setForeground(Color.BLACK);
+        totalForTrainingInstances.setBounds(690, 80, 80, 30);
+        numOfTrainingInstances.setText(String.valueOf(projectManager.getMetaInfo().getNumOfTrainingInstances()));
+        totalForTrainingInstances.setText(Integer.toString(featureManager.getTotalSlice()));
+        trainingInstancePanel.add(trainingInstancePanelLabel);
+        trainingInstancePanel.add(numOfTrainingInstances);
+        trainingInstancePanel.add(dasedLineForTrainingInstances);
+        trainingInstancePanel.add(totalForTrainingInstances);
+        addButton(new JButton(), "Save", null, 800, 80, 80, 20, trainingInstancePanel, TRAINING_INSTANCE_BUTTON_PRESSED, null);
+        features.add(trainingInstancePanel);
+//        features.add(numOfTrainingInstances);
+//        features.add(dasedLineForTrainingInstances);
+//        features.add(totalForTrainingInstances);
         /*
          * compute panel
          */
 
         JPanel computePanel = new JPanel();
-        addButton(new JButton(), "Next", null, 800, 130, 80, 20, features, NEXT_BUTTON_PRESSED, null);
-        addButton(new JButton(), "Train", null, 550, 550, 350, 100, computePanel, COMPUTE_BUTTON_PRESSED, null);
-        addButton(new JButton(), "Save", null, 550, 550, 350, 100, computePanel, SAVE_BUTTON_PRESSED, null);
-        addButton(new JButton(), "Overlay", null, 550, 550, 350, 100, computePanel, TOGGLE_BUTTON_PRESSED, null);
-        addButton(new JButton(), "Masks", null, 550, 550, 350, 100, computePanel, MASKS_BUTTON_PRESSED, null);
+
+        addButton(new JButton(), "Train", null, 550, 100, 350, 100, computePanel, COMPUTE_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Save", null, 550, 100, 350, 100, computePanel, SAVE_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Overlay", null, 550, 100, 350, 100, computePanel, TOGGLE_BUTTON_PRESSED, null);
+        addButton(new JButton(), "Masks", null, 550, 100, 350, 100, computePanel, MASKS_BUTTON_PRESSED, null);
 
         features.add(computePanel);
         frame.add(features);
+
+
 
         /*
          *  Data panel
@@ -286,7 +329,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
             }
         });
 
-        dataJPanel.setBounds(720, 130, 100, 60);
+        dataJPanel.setBounds(720, 160, 100, 40);
         learningType.setSelectedIndex(0);
         learningType.setFont(panelFONT);
         learningType.setBackground(Color.GRAY);
@@ -355,7 +398,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         roiPanel.removeAll();
 //        jCheckBoxList.clear();
 //        jTextList.clear();
-        int classes = groundTruthManager.getNumOfClasses();
+        int classes = groundTruthClassInfoIndexedMap.size();
 //        IJ.log(Integer.toString(classes));
 //        if(classes%3==0){
 //            int tempSize=classes/3;
@@ -365,9 +408,9 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
 //        addButton(new JButton(), "ADD CLASS",null , 630, 20, 130, 20,classPanel,ADDCLASS_BUTTON_PRESSED,null );
 //        addButton(new JButton(), "SAVE CLASS",null , 630, 20, 130, 20,classPanel,SAVECLASS_BUTTON_PRESSED,null );
 //        addButton(new JButton(), "DELETE CLASS",null , 630, 20, 130, 20,classPanel,DELETE_BUTTON_PRESSED,null );
-        for (String key : featureManager.getClassKeys()) {
-            String label = featureManager.getClassLabel(key);
-            Color color = featureManager.getClassColor(key);
+        for (String key : groundInfoClassList.keySet()) {
+            String label = groundInfoClassList.get(key).getLabel();
+            Color color = groundInfoClassList.get(key).getColor();
 //            addClasses(key,label,color);
             addSidePanel(color, key, label);
         }
@@ -392,13 +435,13 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         roiOverlayList.put(key, roiOverlay);
         JPanel buttonPanel = new JPanel();
         buttonPanel.setName(key);
-        ActionEvent addbuttonAction = new ActionEvent(buttonPanel, 1, "AddButton");
-        ActionEvent uploadAction = new ActionEvent(buttonPanel, 2, "OpenLUT");
-//        ActionEvent downloadAction= new ActionEvent(buttonPanel, 3,"DownloadButton");
+//
+        ActionEvent lutAction = new ActionEvent(buttonPanel, 2, "OpenLUT");
+//
         JCheckBox checkBox = new JCheckBox();
         checkBox.setName(key);
         buttonPanel.add(checkBox);
-        JTextArea textArea = new JTextArea();
+        JLabel textArea = new JLabel();
         textArea.setName(key);
         textArea.setText(label);
         buttonPanel.add(textArea);
@@ -406,8 +449,8 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         JButton button = new JButton();
         button.setBackground(color);
         button.setName(key);
-        ActionEvent colorAction = new ActionEvent(button, color.getRGB(), "ColorButton");
-        addAction(button, colorAction);
+//        ActionEvent colorAction = new ActionEvent(button, color.getRGB(), "ColorButton");
+//        addAction(button, colorAction);
         buttonPanel.add(button);
 
 //        JButton addButton= new JButton();
@@ -417,7 +460,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
 //        JButton download= new JButton();
 //        download.setName(key);
 //        addButton(addButton, label, null, 605,280,350,250, buttonPanel, addbuttonAction, null);
-        addButton(LUTButton, "open LUT", null, 605, 280, 350, 250, buttonPanel, uploadAction, null);
+        addButton(LUTButton, "open LUT", null, 605, 280, 350, 250, buttonPanel, lutAction, null);
 //        addButton(download, null, downloadIcon, 605,280,350,250, buttonPanel, downloadAction, null);
         roiPanel.add(buttonPanel);
 //        panel.add(GuiUtil.addScrollPanel(exampleList.get(key),null));
@@ -471,7 +514,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         if(event== OVERALY_BUTTON_PRESSED){
             isShowColorOverlay = !isShowColorOverlay;
             if (isShowColorOverlay) {
-                List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+                List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.TRAININGLABELSDIR));
                 updateResultOverlayForGroundTruth(groundTruthImages.get(featureManager.getCurrentSlice() - 1));
             } else {
                 resultOverlay.setImage(null);
@@ -500,10 +543,16 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
 //            }
 
 //        } // end if
+        if (event == TRAINING_INSTANCE_BUTTON_PRESSED) {
+            this.customNumOfTrainingInstances = Integer.parseInt(numOfTrainingInstances.getText());
+            saveGroundTruthFeatureMetadata();
+            IJ.log(String.format("Number of training instances %d",customNumOfTrainingInstances));
+        }
+
 
         if (event == SAVE_BUTTON_PRESSED) {
-            featureManager.saveFeatureMetadata();
-            JOptionPane.showMessageDialog(null, "Successfully saved regions of interest");
+            saveGroundTruthFeatureMetadata();
+            JOptionPane.showMessageDialog(null, "Successfully saved groundTruth metainfo!");
         } //end if
 
         if (event == SAVECLASS_BUTTON_PRESSED) {
@@ -523,7 +572,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
 //            image.getAllStatistics();
             imageNum.setText(Integer.toString(featureManager.getCurrentSlice()));
             loadImage(image);
-            List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+            List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.TRAININGLABELSDIR));
 
             if (showColorOverlay) {
                 if (featureManager.getProjectType() == ProjectType.CLASSIF)
@@ -539,7 +588,6 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
                 int y_centre = ic.getHeight() / 2 + ic.getY();
                 ic.zoomIn(x_centre, y_centre);
             }
-            updateGui();
             updateResultOverlayForGroundTruth(groundTruthImages.get(featureManager.getCurrentSlice()-1));
         } // end if
 
@@ -547,7 +595,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
             ImagePlus image = featureManager.getNextImage();
             imageNum.setText(Integer.toString(featureManager.getCurrentSlice()));
             loadImage(image);
-            List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+            List<ImagePlus> groundTruthImages = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.TRAININGLABELSDIR));
             if (showColorOverlay) {
                 if (featureManager.getProjectType() == ProjectType.CLASSIF)
                     classifiedImage = null;
@@ -568,28 +616,32 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         } // end if
 
         if (event == COMPUTE_BUTTON_PRESSED) {
-            if (featureManager.getProjectType() == ProjectType.CLASSIF) {
-                // it means new round of training, so set result setting to false
-                showColorOverlay = false;
-                // removing previous markings and reset things
-                predictionResultClassification = null;
-                displayImage.setOverlay(null);
+            if(customNumOfTrainingInstances==0 || customNumOfTrainingInstances > groundTruthImages.size()) {
+                JOptionPane.showMessageDialog(null, "Set the number of training instanced to a valid value!");
+            } else{
+                if (featureManager.getProjectType() == ProjectType.CLASSIF) {
+                    // it means new round of training, so set result setting to false
+                    showColorOverlay = false;
+                    // removing previous markings and reset things
+                    predictionResultClassification = null;
+                    displayImage.setOverlay(null);
 
-                // compute new predictions
-                featureManager.compute();
-                predictionResultClassification = featureManager.getClassificationResultMap();
+                    // compute new predictions
+                    featureManager.computeForGroundTruth(groundInfoClassList, imageToGroundTruthMap, groundTruthClassInfoPixelIndexedMap, customNumOfTrainingInstances);
+                    predictionResultClassification = featureManager.getClassificationResultMap();
 
-                // we do not need to get any image in classification setting, only predictions are needed
-                classifiedImage = null;
-            }
+                    // we do not need to get any image in classification setting, only predictions are needed
+                    classifiedImage = null;
+                }
 
-            //segmentation setting
-            else {
-                classifiedImage = featureManager.compute();
-            }
+                //segmentation setting
+                else {
+                    classifiedImage = featureManager.computeForGroundTruth(groundInfoClassList, imageToGroundTruthMap, groundTruthClassInfoPixelIndexedMap, customNumOfTrainingInstances);
+                }
+
             IJ.log("compute");
 
-            toggleOverlay();
+            toggleOverlay();}
         } //end if
 
         if (event == TOGGLE_BUTTON_PRESSED) {
@@ -623,20 +675,44 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
             int rVal = fileChooser.showOpenDialog(null);
             if (rVal == JFileChooser.APPROVE_OPTION) {
                 String imageDir = fileChooser.getSelectedFile().toString();
-                loadImageStack(imageDir, this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
-                List<ImagePlus> images = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.LEARNINGDIR));
+                loadImageStack(imageDir, this.featureManager.getProjectManager().getProjectDir().get(ASCommon.TRAININGLABELSDIR));
+                List<ImagePlus> images = loadSavedImages(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.TRAININGLABELSDIR));
                 String message = String.format("Successfully loaded the ground truth images!\n Num of Slices loaded: %d \n Bit depth: %d \n Images height: %d \n Images Width: %d ", images.size(), images.get(0).getBitDepth(), images.get(0).getHeight(), images.get(0).getWidth());
                 JOptionPane.showMessageDialog(null, message);
+                groundInfoClassList.clear();
+                groundTruthClassInfoIndexedMap.clear();
+                groundTruthClassInfoPixelIndexedMap.clear();
 
-                updateResultOverlayForGroundTruth(images.get(featureManager.getCurrentSlice()-1));
+
                 System.out.println(images.toString());
                 long[] hist = calculateGroundTruthClasses(images);
                 Map<String, Integer> histData = getGroundTruthClassDetails(hist);
+                int classIndex = 0;
+                for (String label : histData.keySet()) {
+                    GroundTruthClassInfo groundTruthClassInfo = new GroundTruthClassInfo(label, label, getColor(), histData.get(label), classIndex);
+                    groundInfoClassList.put(label, groundTruthClassInfo);
+                    groundTruthClassInfoIndexedMap.put(classIndex, groundTruthClassInfo);
+                    groundTruthClassInfoPixelIndexedMap.put(histData.get(label), groundTruthClassInfo);
+                    classIndex++;
+
+                }
                 this.groundTruthManager.setPixelClasses(histData);
                 this.groundTruthManager.setNumClasses(histData.size());
+                updateResultOverlayForGroundTruth(images.get(featureManager.getCurrentSlice()-1));
+
+//                addClassPanel();
+                addGroundTruthClassPanel(groundInfoClassList);
+                validateFrame();
+                for (int i = 0; i < groundTruthImages.size(); i++) {
+                    imageToGroundTruthMap.put(this.featureManager.getImages().get(i), groundTruthImages.get(i));
+                }
+
+
 
             }
             updateGui();
+            saveGroundTruthFeatureMetadata();
+            IJ.log("metadata updated!");
 
         } //end if
 
@@ -672,19 +748,35 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
 
         if (event.getActionCommand() == "ColorButton") {
             String key = ((Component) event.getSource()).getName();
-            Color c;
-            c = JColorChooser.showDialog(new JFrame(),
-                    "CLASS COLOR", featureManager.getClassColor(key));
-
-            ((Component) event.getSource()).setBackground(c);
-            featureManager.updateColor(key, c);
-            updateGui();
+//            Color c;
+//            c = JColorChooser.showDialog(new JFrame(),
+//                    "CLASS COLOR", groundInfoClassList.get(key).getColor());
+//
+//            ((Component) event.getSource()).setBackground(c);
+//            groundInfoClassList.get(key).setColor(c);
+//            updateGui();
+//            updateResultOverlay(new ImagePlus(groundTruthImages.get(featureManager.getCurrentSlice()-1)));
+            displayClassInfo(groundInfoClassList.get(key));
         }// end if
 
         if (event.getActionCommand() == "OpenLUT") {
-            LUTLabelUI lut_editor1 = new LUTLabelUI();
+            String key = ((Component) event.getSource()).getName();
+            LUTLabelUI lut_editor1 = new LUTLabelUI(this, key);
             lut_editor1.run("");
         }//end if
+
+
+    }
+
+    public void displayClassInfo(GroundTruthClassInfo groundTruthClassInfo){
+
+        GenericDialog gd =  new GenericDialog("Class details of "+ groundTruthClassInfo.getLabel());
+        gd.setSize(50,50);
+        gd.addStringField("Title: ", groundTruthClassInfo.getLabel());
+        gd.addStringField("Key: ", groundTruthClassInfo.getKey());
+
+
+        gd.showDialog();
 
 
     }
@@ -696,9 +788,13 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
     private void toggleOverlay() {
         if (featureManager.getProjectType() == ProjectType.SEGM) {
             showColorOverlay = !showColorOverlay;
+            if(null==classifiedImage){
+                JOptionPane.showMessageDialog(null, "No classified image found!");
+            }
             if (showColorOverlay && (null != classifiedImage)) {
                 updateResultOverlay(classifiedImage);
-            } else {
+
+            }else {
                 resultOverlay.setImage(null);
                 displayImage.updateAndDraw();
             }
@@ -729,7 +825,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         if (featureManager.getProjectType() == ProjectType.SEGM) {
             ImageProcessor overlay = classifiedImage.getProcessor().duplicate();
             overlay = overlay.convertToByte(false);
-            setLut(featureManager.getColors());
+            setLut(this.groundInfoClassList);
             overlay.setColorModel(overlayLUT);
             resultOverlay.setImage(overlay);
             displayImage.updateAndDraw();
@@ -766,22 +862,22 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         }
     }
 
-    public void setLut(List<Color> colors) {
+    public void setLut(Map<String,GroundTruthClassInfo> classInfos) {
         int i = 0;
-        for (Color color : colors) {
-            red[i] = (byte) color.getRed();
-            green[i] = (byte) color.getGreen();
-            blue[i] = (byte) color.getBlue();
+        for (GroundTruthClassInfo classInfo : classInfos.values()) {
+            red[classInfo.getPixelValue()] = (byte) classInfo.getColor().getRed();
+            green[classInfo.getPixelValue()] = (byte) classInfo.getColor().getGreen();
+            blue[classInfo.getPixelValue()] = (byte) classInfo.getColor().getBlue();
             i++;
         }
-        blue[255] = -1;
+//        blue[255] = -1;
         overlayLUT = new LUT(red, green, blue);
     }
 
     private void updateGui() {
         try {
-            drawExamples();
-            updateExampleLists();
+//            drawExamples();
+//            updateExampleLists();
             //updateallExampleLists();
             ic.setMinimumSize(new Dimension(IMAGE_CANVAS_DIMENSION, IMAGE_CANVAS_DIMENSION));
             ic.repaint();
@@ -927,6 +1023,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
             createStackImage(currentImage, format, folder, dir);
         } else {
             String imgDir = dir + folder;
+//            groundTruthImages.add(imgDir);
 //            createDirectory(imgDir);
             IJ.saveAs(currentImage, format, imgDir);
 
@@ -942,6 +1039,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
             String title = folder + i;
             IJ.log(folder);
             IJ.log(title);
+//            groundTruthImages.add(directory + title);
 //            createDirectory(directory);
             IJ.saveAs(new ImagePlus(title, processor), format, directory + title);
         }
@@ -986,6 +1084,7 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
         for (int i = 0; i < 256; i++) {
             if (hist[i] != 0) {
                 classInfo.put("label"+ labelIndex.toString(), i);
+                labelIndex++;
             }
         }
         return classInfo;
@@ -1055,23 +1154,160 @@ public class FeaturePanelGroundTruth extends ImageWindow implements ASCommon {
     private List<ImagePlus> loadSavedImages(String dir) {
         List<String> images = loadImages(dir);
         List<ImagePlus> imageStack = new ArrayList<>();
+        groundTruthImages.clear();
         for (String image : images) {
             imageStack.add(new ImagePlus(dir+"/"+image));
+            groundTruthImages.add(dir + "/" + image);
         }
         return imageStack;
 
     }
 
-    public void updateResultOverlayForGroundTruth(ImagePlus classifiedImage)
+    private void setGroundTruthDirs(String dir) {
+        List<String> images = loadImages(dir);
+        for (String image : images) {
+            groundTruthImages.add(dir + "/" + image);
+        }
+    }
+
+    public void updateResultOverlayForGroundTruth(ImagePlus groundTruthImage)
     {
         if(featureManager.getProjectType()==ProjectType.SEGM) {
-            ImageProcessor overlay = classifiedImage.getProcessor().duplicate();
+            overlayImage = groundTruthImage;
+            ImageProcessor overlay = groundTruthImage.getProcessor().duplicate();
             overlay = overlay.convertToByte(false);
-            setLut(featureManager.getColors());
+            setLut(this.groundInfoClassList);
             overlay.setColorModel(overlayLUT);
             resultOverlay.setImage(overlay);
             displayImage.updateAndDraw();
         }
+    }
+
+
+    //todo: make color unique
+    private Color getColor() {
+        float r = rand.nextFloat();
+        float g = rand.nextFloat();
+        float b = rand.nextFloat();
+        Color randomColor = new Color(r, g, b);
+        return randomColor;
+    }
+
+    public void addGroundTruthClassPanel(Map<String,GroundTruthClassInfo> groundTruthClasses) {
+//        classPanel.removeAll();
+        roiPanel.removeAll();
+//        jCheckBoxList.clear();
+//        jTextList.clear();
+        int classes = groundTruthManager.getNumOfClasses();
+//        IJ.log(Integer.toString(classes));
+//        if(classes%3==0){
+//            int tempSize=classes/3;
+//            classPanel.setPreferredSize(new Dimension(340, 80+30*tempSize));
+//        }
+        roiPanel.setPreferredSize(new Dimension(350, 175 * classes));
+//        addButton(new JButton(), "ADD CLASS",null , 630, 20, 130, 20,classPanel,ADDCLASS_BUTTON_PRESSED,null );
+//        addButton(new JButton(), "SAVE CLASS",null , 630, 20, 130, 20,classPanel,SAVECLASS_BUTTON_PRESSED,null );
+//        addButton(new JButton(), "DELETE CLASS",null , 630, 20, 130, 20,classPanel,DELETE_BUTTON_PRESSED,null );
+        for (GroundTruthClassInfo classInfo : groundTruthClasses.values()) {
+//            String label = featureManager.getClassLabel(key);
+//            Color color = featureManager.getClassColor(key);
+////            addClasses(key,label,color);
+            addSidePanel(classInfo.getColor(), classInfo.getKey(), classInfo.getLabel());
+        }
+    }
+
+    public Map<String, GroundTruthClassInfo> getGroundInfoClassList() {
+        return groundInfoClassList;
+    }
+
+    public void setGroundInfoClassList(Map<String, GroundTruthClassInfo> groundInfoClassList) {
+        this.groundInfoClassList = groundInfoClassList;
+    }
+
+    public List<String> getGroundTruthImages() {
+        return groundTruthImages;
+    }
+
+    public void setGroundTruthImages(List<String> groundTruthImages) {
+        this.groundTruthImages = groundTruthImages;
+    }
+
+    public List<String> getTestingImages() {
+        return testingImages;
+    }
+
+    public void setTestingImages(List<String> testingImages) {
+        this.testingImages = testingImages;
+    }
+
+    public static long getSerialVersionUID() {
+        return serialVersionUID;
+    }
+
+    public Map<Integer, GroundTruthClassInfo> getGroundTruthClassInfoIndexedMap() {
+        return groundTruthClassInfoIndexedMap;
+    }
+
+    public void setGroundTruthClassInfoIndexedMap(Map<Integer, GroundTruthClassInfo> groundTruthClassInfoIndexedMap) {
+        this.groundTruthClassInfoIndexedMap = groundTruthClassInfoIndexedMap;
+    }
+
+    public ImagePlus getOverlayImage() {
+        return overlayImage;
+    }
+
+    public void setOverlayImage(ImagePlus overlayImage) {
+        this.overlayImage = overlayImage;
+    }
+
+    public Map<Integer, GroundTruthClassInfo> getGroundTruthClassInfoPixelIndexedMap() {
+        return groundTruthClassInfoPixelIndexedMap;
+    }
+
+    public void setGroundTruthClassInfoPixelIndexedMap(Map<Integer, GroundTruthClassInfo> groundTruthClassInfoPixelIndexedMap) {
+        this.groundTruthClassInfoPixelIndexedMap = groundTruthClassInfoPixelIndexedMap;
+    }
+
+    public void saveGroundTruthFeatureMetadata() {
+        ProjectInfo projectInfo = projectManager.getMetaInfo();
+        projectInfo.resetGroundTruthFeatureInfo();
+        for (GroundTruthClassInfo groundTruthClassInfo : groundInfoClassList.values()) {
+
+            GroundTruthFeatureInfo groundTruthFeatureInfo = new GroundTruthFeatureInfo();
+            groundTruthFeatureInfo.setKey(groundTruthClassInfo.getKey());
+            groundTruthFeatureInfo.setLabel(groundTruthClassInfo.getLabel());
+            groundTruthFeatureInfo.setPixelValue(groundTruthClassInfo.getPixelValue());
+            groundTruthFeatureInfo.setColor(groundTruthClassInfo.getColor().getRGB());
+            groundTruthFeatureInfo.setClassIndex(groundTruthClassInfo.getClassIndex());
+            projectInfo.addGroundTruthFeature(groundTruthFeatureInfo);
+        }
+        projectInfo.setNumOfTrainingInstances(customNumOfTrainingInstances);
+        projectInfo.setGroundTruthClasses(groundInfoClassList.size());
+        projectManager.writeMetaInfo(projectInfo);
+    }
+
+    public boolean setGroundTruthFeatureMetadata() {
+        boolean alreadysetClass = false;
+        ProjectInfo projectInfo = projectManager.getMetaInfo();
+        for (GroundTruthFeatureInfo groundTruthFeatureInfo : projectInfo.getGroundTruthFeatureInfoList()) {
+           alreadysetClass = true;
+            GroundTruthClassInfo groundTruthClassInfo = new GroundTruthClassInfo(groundTruthFeatureInfo.getKey(), groundTruthFeatureInfo.getLabel(),
+                    new Color(groundTruthFeatureInfo.getColor()), groundTruthFeatureInfo.getPixelValue(), groundTruthFeatureInfo.getClassIndex());
+            groundInfoClassList.put(groundTruthFeatureInfo.getKey(), groundTruthClassInfo);
+            groundTruthClassInfoPixelIndexedMap.put(groundTruthFeatureInfo.getPixelValue(), groundTruthClassInfo);
+            groundTruthClassInfoIndexedMap.put(groundTruthFeatureInfo.getClassIndex(), groundTruthClassInfo);
+        }
+        customNumOfTrainingInstances = projectInfo.getNumOfTrainingInstances();
+        setGroundTruthDirs(this.featureManager.getProjectManager().getProjectDir().get(ASCommon.TRAININGLABELSDIR));
+        for (int i = 0; i < groundTruthImages.size(); i++) {
+            imageToGroundTruthMap.put(this.featureManager.getImages().get(i), groundTruthImages.get(i));
+        }
+        if (imageToGroundTruthMap.size() != 0) {
+            overlayImage = new ImagePlus(imageToGroundTruthMap.get(featureManager.getImages().get(featureManager.getCurrentSlice() - 1)));
+        }if(featureManager.getClassifiedImage().getImage()!=null){
+            classifiedImage = featureManager.getClassifiedImage();
+        }
+        return alreadysetClass;
     }
 
 }

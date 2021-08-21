@@ -69,7 +69,7 @@ public class FeatureManager  {
 	private ProjectManager projectManager;
 	private ProjectInfo projectInfo;
 	private Random rand = new Random();
-	private String projectString, featurePath;
+	private String projectString, featurePath, groundTruthPath;
 	private int sliceNum, totalSlices;
 	private List<String> images;
 	private Map<ProjectType, IFeature> featureMap = new HashMap<>();
@@ -85,6 +85,7 @@ public class FeatureManager  {
 		this.projectInfo = this.projectManager.getMetaInfo();
 		this.images = new ArrayList<>();
 		this.projectString = this.projectInfo.getProjectDirectory().get(ASCommon.IMAGESDIR);
+		this.groundTruthPath = this.projectInfo.getProjectDirectory().get(ASCommon.TRAININGLABELSDIR);
 		//System.out.println(this.projectString);
 		this.featurePath = this.projectInfo.getProjectDirectory().get(ASCommon.FEATURESDIR);
 		this.totalSlices = loadImages(this.projectString);
@@ -401,9 +402,19 @@ public class FeatureManager  {
 		projectManager.writeMetaInfo(projectInfo);
 	}
 
+
 	public IDataSet extractFeatures(ProjectType featureType) {
        // System.out.println(featureType);
 		featureMap.get(featureType).createTrainingInstance(classes.values());
+		IDataSet dataset = featureMap.get(featureType).getDataSet();
+		projectManager.setData(dataset);
+		return dataset;
+	}
+
+	public IDataSet extractFeaturesForGroundTruth(ProjectType featureType, Map<String, GroundTruthClassInfo> groundTruthClassInfos, Map<String,String> imagesToGroundTruthMap, Map<Integer, GroundTruthClassInfo> groundTruthClassInfoIndexedMap, int trainingInstances) {
+		// System.out.println(featureType);
+		PixelInstanceCreator pixelInstanceCreator = (PixelInstanceCreator)featureMap.get(featureType);
+		pixelInstanceCreator.createTrainingInstanceFromGroundTruth(groundTruthClassInfos.values(), imagesToGroundTruthMap, groundTruthClassInfoIndexedMap, trainingInstances);
 		IDataSet dataset = featureMap.get(featureType).getDataSet();
 		projectManager.setData(dataset);
 		return dataset;
@@ -721,5 +732,91 @@ public class FeatureManager  {
 
 	public ProjectInfo getProjectInfo() {
 		return projectInfo;
+	}
+
+	public ImagePlus computeForGroundTruth(Map<String, GroundTruthClassInfo> groundTruthClassInfos, Map<String,String> imagesToGroundTruthMap, Map<Integer, GroundTruthClassInfo> groundTruthClassInfoIndexedMap, int trainingInstances) {
+
+		if(projectInfo.getProjectType()==ProjectType.CLASSIF) {
+			predictionResultClassification = new HashMap<>();
+		}
+
+		// IJ.debugMode=true;
+		IJ.log("TRAINING STARTED");
+		System.out.println("TRAINING STARTED");
+		// extract features in weka format, returns IDataset object
+		extractFeaturesForGroundTruth(projectInfo.getProjectType(),groundTruthClassInfos, imagesToGroundTruthMap, groundTruthClassInfoIndexedMap, trainingInstances);
+
+		// trains as per the setting of learning manager, we now have a trained classifier
+		learningManager.trainClassifier();
+
+		IJ.log("TRAINING DONE");
+		System.out.println("TRAINING DONE");
+
+		for (String image : images) {
+			//System.out.println(image +" image");
+
+			//classification setting
+//			if(projectInfo.getProjectType()==ProjectType.CLASSIF) {
+//
+//				//list of rois to make classified image instance
+//				List<Roi> training_roi_list;
+//				List<Roi> testing_roi_list;
+//
+//				// iterate over all training rois (of all the classes) and predict their output
+//				for(String key: getClassKeys()){
+//					training_roi_list = classes.get(key).getTrainingRois(image);
+//					if(training_roi_list!=null) {
+//						for (Roi roi:training_roi_list) {
+//							predictionResultClassification.put(roi.getName(), getRoiPredictionForClassification(roi));
+//						}
+//					}
+//				}
+//
+//				// iterate over all testing ROIs (of all the classes) and predict their output
+//				for(String key: getClassKeys()){
+//					testing_roi_list = classes.get(key).getTestingRois(image);
+//					if(testing_roi_list!=null) {
+//						for (Roi roi:testing_roi_list) {
+//							predictionResultClassification.put(roi.getName(), getRoiPredictionForClassification(roi));
+//						}
+//					}
+//				}
+
+				//	System.out.println("the size of list of roi is in FM "+predictionResultClassification.size());
+//			} else {//segmentation setting
+				//get the current image
+				ImagePlus currentImage = getCurrentImage();
+				//classificationResult would have no of terms as number of pixels in particular image,
+				//expects createAllinstance would provide instances of all pixels of the particular image
+
+				//String key= ProjectType.valueOf(projectInfo.getProjectType()).toString();
+				//System.out.println("mask key "+key);
+				double[] classificationResult = learningManager
+						.applyClassifier(featureMap.get(projectInfo.getProjectType()).createAllInstances(image));
+
+				//now classificationResult has predictions of all pixels of one particular image
+				ImageProcessor classifiedSliceProcessor = new FloatProcessor(currentImage.getWidth(),
+						currentImage.getHeight(), classificationResult);
+
+				//segmented image instance
+				ImagePlus classifiedImage = new ImagePlus(image, classifiedSliceProcessor);
+				classifiedImage.setCalibration(currentImage.getCalibration());
+				IJ.save(classifiedImage, featurePath + image);
+//			}
+
+		}
+
+		if(projectInfo.getProjectType()==ProjectType.CLASSIF) {
+			return null;
+		}
+		return getClassifiedImage();
+	}
+
+	public List<String> getImages() {
+		return images;
+	}
+
+	public void setImages(List<String> images) {
+		this.images = images;
 	}
 }

@@ -45,7 +45,7 @@ public class ProjectInfo{
 	private Date createdDate=new Date();
 	private Date modifyDate=new Date();
 	
-	private String version="1.0.0";
+	private String version="1.1.0";
 	
 	@JsonProperty(value="classes")
 	private int classes=-1;
@@ -61,6 +61,8 @@ public class ProjectInfo{
 	private List<Map<String, String>> filters = new ArrayList<>();
 	
 	private List<FeatureInfo> featureList = new ArrayList<>();
+
+	private List<GroundTruthFeatureInfo> groundTruthFeatureInfoList = new ArrayList<>();
 	
 	private Map<String, String> learning = new HashMap<>();
 	
@@ -69,6 +71,7 @@ public class ProjectInfo{
 	private String featureSelection="";
 
 	private int  groundTruthClasses = -1;
+	private int numOfTrainingInstances = 0;
 	
 	/*
 	 * JSON ignore
@@ -198,6 +201,17 @@ public class ProjectInfo{
 	 */
 	public void resetFeatureInfo()	{
 		this.featureList.clear();
+	}
+
+	public void addGroundTruthFeature(GroundTruthFeatureInfo groundTruthFeatureInfo)	{
+		this.groundTruthFeatureInfoList.add(groundTruthFeatureInfo);
+	}
+
+	/**
+	 *
+	 */
+	public void resetGroundTruthFeatureInfo()	{
+		this.groundTruthFeatureInfoList.clear();
 	}
 
 	/**
@@ -426,6 +440,30 @@ public class ProjectInfo{
 
 	public void setGroundTruthClasses(int groundTruthClasses) {
 		this.groundTruthClasses = groundTruthClasses;
+	}
+
+	public String getProjectName() {
+		return projectName;
+	}
+
+	public void setProjectName(String projectName) {
+		this.projectName = projectName;
+	}
+
+	public List<GroundTruthFeatureInfo> getGroundTruthFeatureInfoList() {
+		return groundTruthFeatureInfoList;
+	}
+
+	public void setGroundTruthFeatureInfoList(List<GroundTruthFeatureInfo> groundTruthFeatureInfoList) {
+		this.groundTruthFeatureInfoList = groundTruthFeatureInfoList;
+	}
+
+	public int getNumOfTrainingInstances() {
+		return numOfTrainingInstances;
+	}
+
+	public void setNumOfTrainingInstances(int numOfTrainingInstances) {
+		this.numOfTrainingInstances = numOfTrainingInstances;
 	}
 }// END
 

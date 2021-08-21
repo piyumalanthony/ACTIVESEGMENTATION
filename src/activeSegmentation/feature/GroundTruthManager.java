@@ -10,6 +10,7 @@ import activeSegmentation.prj.ClassInfo;
 import activeSegmentation.prj.ProjectInfo;
 import activeSegmentation.prj.ProjectManager;
 import activeSegmentation.util.GuiUtil;
+import ij.ImagePlus;
 import ij.gui.Roi;
 import ij.plugin.frame.RoiManager;
 
@@ -180,4 +181,12 @@ public class GroundTruthManager {
             classes.put(key, classInfo);
         }
     }
+
+    public ImagePlus getPreviousImage() {
+        if (this.sliceNum > 1) {
+            this.sliceNum -= 1;
+        }
+        return new ImagePlus(projectString + this.images.get(sliceNum - 1));
+    }
+
 }

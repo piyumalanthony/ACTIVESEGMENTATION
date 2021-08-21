@@ -1,6 +1,7 @@
 package activeSegmentation.gui;
 
 
+import activeSegmentation.prj.GroundTruthClassInfo;
 import ij.*;
 import ij.process.*;
 import ij.gui.*;
@@ -9,6 +10,11 @@ import java.awt.*;
 import java.awt.image.*;
 import ij.util.*;
 import ij.measure.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.Vector;
 import java.awt.event.*;
 
@@ -27,9 +33,17 @@ class ColorPanel extends Panel implements MouseListener, MouseMotionListener{
     private boolean updateLut;
     private static String[] choices = {"Replication","Interpolation", "Spline Fitting"};
     private static String scaleMethod = choices[1];
+    private Random rand = new Random();
+    FeaturePanelGroundTruth featurePanelGroundTruth;
+    int numOfGroundTruthClasses;
+    String key;
 
-    ColorPanel(ImagePlus imp) {
+
+    ColorPanel(ImagePlus imp, FeaturePanelGroundTruth featurePanelGroundTruth, String key) {
+        this.featurePanelGroundTruth = featurePanelGroundTruth;
         setup(imp);
+        numOfGroundTruthClasses = featurePanelGroundTruth.getGroundInfoClassList().size();
+        this.key = key;
     }
 
     public void setup(ImagePlus imp) {
@@ -52,10 +66,19 @@ class ColorPanel extends Panel implements MouseListener, MouseMotionListener{
 //        cm.getReds(reds);
 //        cm.getGreens(greens);
 //        cm.getBlues(blues);
+        Map<Integer, GroundTruthClassInfo> classInfoMap = featurePanelGroundTruth.getGroundTruthClassInfoIndexedMap();
+        int numGroundTruthClasses = classInfoMap.size();
         addMouseListener(this);
         addMouseMotionListener(this);
-        for(int index  = 0; index < mapSize; index++)
-            c[index] = new Color(reds[index]&255, greens[index]&255, blues[index]&255);
+        for (int index = 0; index < mapSize; index++) {
+            if (index < numGroundTruthClasses) {
+                c[index] = classInfoMap.get(index).getColor();
+            } else {
+                c[index] = getColor();
+            }
+
+        }
+//            c[index] = new Color(reds[index]&255, greens[index]&255, blues[index]&255);
     }
 
     public Dimension getPreferredSize()  {
@@ -121,15 +144,18 @@ class ColorPanel extends Panel implements MouseListener, MouseMotionListener{
             finalC = 0;
         if (initialC == finalC) {
             b = c[finalC];
-            ColorChooser cc = new ColorChooser("Color at Entry " + (finalC) , c[finalC] ,  false);
+//            ColorChooser cc = new ColorChooser("Color at Entry " + (finalC) , c[finalC] ,  false);
+            LUTColorChooser cc = new LUTColorChooser("Color at Entry " + (finalC) , c[finalC] ,  false, featurePanelGroundTruth, key);
             c[finalC] = cc.getColor();
+            featurePanelGroundTruth.getGroundTruthClassInfoIndexedMap().get(finalC).setColor(c[finalC]);
             if (c[finalC]==null){
                 c[finalC] = b;
             }
             colorRamp();
         } else {
             b = c[initialC];
-            ColorChooser icc = new ColorChooser("Initial Entry (" + (initialC)+")" , c[initialC] , false);
+//            ColorChooser icc = new ColorChooser("Initial Entry (" + (initialC)+")" , c[initialC] , false);
+            LUTColorChooser icc = new LUTColorChooser("Color at Entry " + (finalC) , c[finalC] ,  false, featurePanelGroundTruth, key);
             c[initialC] = icc.getColor();
             if (c[initialC]==null){
                 c[initialC] = b;
@@ -137,7 +163,8 @@ class ColorPanel extends Panel implements MouseListener, MouseMotionListener{
                 return;
             }
             b = c[finalC];
-            ColorChooser fcc = new ColorChooser("Final Entry (" + (finalC)+")" , c[finalC] , false);
+//            ColorChooser fcc = new ColorChooser("Final Entry (" + (finalC)+")" , c[finalC] , false);
+            LUTColorChooser fcc = new LUTColorChooser("Color at Entry " + (finalC) , c[finalC] ,  false,featurePanelGroundTruth, key);
             c[finalC] = fcc.getColor();
             if (c[finalC]==null){
                 c[finalC] = b;
@@ -148,6 +175,11 @@ class ColorPanel extends Panel implements MouseListener, MouseMotionListener{
         }
         initialC = finalC = -1;
         applyLUT();
+        featurePanelGroundTruth.addGroundTruthClassPanel(featurePanelGroundTruth.getGroundInfoClassList());
+        featurePanelGroundTruth.validateFrame();
+        featurePanelGroundTruth.updateResultOverlayForGroundTruth(imp);
+
+
     }
 
     public void mouseClicked(MouseEvent e){}
@@ -351,7 +383,7 @@ class ColorPanel extends Panel implements MouseListener, MouseMotionListener{
         int index = 0;
         for (int y=0; y<rows; y++) {
             for (int x=0; x<columns; x++) {
-                if(index>=mapSize) {
+                if(index>=mapSize || index>=numOfGroundTruthClasses) {
                     g.setColor(Color.lightGray);
                     g.fillRect(x*entryWidth,  y*entryHeight, entryWidth, entryHeight);
                 } else if (((index <= finalC) && (index >= initialC)) || ((index >= finalC) && (index <=  initialC))){
@@ -379,6 +411,14 @@ class ColorPanel extends Panel implements MouseListener, MouseMotionListener{
 
     int getMapSize() {
         return mapSize;
+    }
+
+    private Color getColor() {
+        float r = rand.nextFloat();
+        float g = rand.nextFloat();
+        float b = rand.nextFloat();
+        Color randomColor = new Color(r, g, b);
+        return randomColor;
     }
 
 }

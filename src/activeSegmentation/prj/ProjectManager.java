@@ -311,6 +311,7 @@ public class ProjectManager {
 		projectDir.put(ASCommon.IMAGESDIR,projectString+"/images/");
 		projectDir.put(ASCommon.TESTIMAGESDIR,projectString+"/testimages/");
 		projectDir.put(ASCommon.TESTFILTERSDIR,projectString+"/testfilters/");
+		projectDir.put(ASCommon.TRAININGLABELSDIR, projectString+"/traininglabels/");
 	}
 	
 	private void createProjectSpace(String projectDirectory, String projectName) {
@@ -324,6 +325,7 @@ public class ProjectManager {
 		createDirectory(projectDir.get(ASCommon.IMAGESDIR));
 		createDirectory(projectDir.get(ASCommon.TESTIMAGESDIR));
 		createDirectory(projectDir.get(ASCommon.TESTFILTERSDIR));
+		createDirectory(projectDir.get(ASCommon.TRAININGLABELSDIR));
 		IJ.log("DONE");
 	}
 	

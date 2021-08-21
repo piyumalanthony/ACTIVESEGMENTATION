@@ -4,12 +4,7 @@ import java.awt.Point;
 import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Vector;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -18,8 +13,10 @@ import activeSegmentation.IDataSet;
 import activeSegmentation.IFeature;
 import activeSegmentation.learning.WekaDataSet;
 import activeSegmentation.prj.ClassInfo;
+import activeSegmentation.prj.GroundTruthClassInfo;
 import activeSegmentation.prj.ProjectInfo;
 import activeSegmentation.util.InstanceUtil;
+import ij.process.ImageProcessor;
 import weka.core.Attribute;
 import weka.core.Instance;
 import weka.core.Instances;
@@ -54,7 +51,7 @@ import ij.gui.Roi;
  *      Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-public class PixelInstanceCreator implements IFeature {
+public class  PixelInstanceCreator implements IFeature {
 
 
 
@@ -149,6 +146,37 @@ public class PixelInstanceCreator implements IFeature {
 		//System.out.println(trainingData);
 	}
 
+	public void createTrainingInstanceFromGroundTruth(Collection<GroundTruthClassInfo> classInfos, Map<String,String> imagesToGroundTruthMap, Map<Integer, GroundTruthClassInfo> groundTruthClassInfoIndexedMap, int trainingInstances) {
+		//IJ.debugMode=false;
+		updateFeatures();
+		ArrayList<Attribute> attributes = createFeatureHeader();
+		attributes.add(new Attribute(ASCommon.CLASS, getCLassLabelsForGroundTruth(classInfos)));
+		// create initial set of instances
+		trainingData =  new Instances(ASCommon.INSTANCE_NAME, attributes, 1 );
+		// Set the index of the class attribute
+		trainingData.setClassIndex(numberOfFeatures);
+
+		// Read all lists of examples
+		int count = 0;
+		for(String image: images){
+			//IJ.log(image);
+			ImageStack featureStack=loadFeatureStack(image);
+			ImagePlus groundTruthImage = new ImagePlus(imagesToGroundTruthMap.get(image));
+			//System.out.println(featureStack.size());
+			//IJ.log(featureStack.size());
+			int index=0;
+			addInstancesFromGroundTruthLabels(trainingData, featureStack, groundTruthImage, groundTruthClassInfoIndexedMap);
+			count++;
+			if (count >= trainingInstances) {
+				break;
+			}
+
+
+		}
+		IJ.log(trainingData.toSummaryString());
+		//System.out.println(trainingData);
+	}
+
 
 	private List<String> getCLassLabels(Collection<ClassInfo>  classInfos) {
 
@@ -159,6 +187,17 @@ public class PixelInstanceCreator implements IFeature {
 		this.classLabels=labels;
 		return labels;
 	}
+
+	private List<String> getCLassLabelsForGroundTruth(Collection<GroundTruthClassInfo>  classInfos) {
+
+		List<String> labels= new ArrayList<String>();
+		for(GroundTruthClassInfo classInfo:classInfos) {
+			labels.add(classInfo.getLabel());
+		}
+		this.classLabels=labels;
+		return labels;
+	}
+
 
 	private ImageStack loadFeatureStack(String imageName){
 		String localPath=imageName.substring(0, imageName.lastIndexOf("."));
@@ -249,6 +288,35 @@ public class PixelInstanceCreator implements IFeature {
 			}
 		return numInstances;		
 	}
+
+	private int addInstancesFromGroundTruthLabels(
+			final Instances trainingData,
+			ImageStack featureStack,
+			ImagePlus groundTruthImage, Map<Integer, GroundTruthClassInfo> groundTruthClassInfoIndexedMap)
+	{
+		ImageProcessor imageProcessor = groundTruthImage.getProcessor();
+		int numInstances = 0;
+//		final Rectangle rect = r.getBounds();
+//		final Polygon poly=r.getPolygon();
+		final int x0 = 0;
+		final int y0 = 0;
+
+		final int lastX = groundTruthImage.getWidth();
+		final int lastY = groundTruthImage.getHeight();
+
+		for( int x = x0; x < lastX; x++ )
+			for( int y = y0; y < lastY; y++ )
+			{
+				int pixelValue = imageProcessor.getPixel(x, y);
+				int classIndex = groundTruthClassInfoIndexedMap.get(pixelValue).getClassIndex();
+				trainingData.add( instanceUtil.createInstance(x, y, classIndex,featureStack ,colorFeatures, oldColorFormat) );
+
+				// increase number of instances for this class
+				numInstances ++;
+			}
+		return numInstances;
+	}
+
 
 
 

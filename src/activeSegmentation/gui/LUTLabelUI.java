@@ -22,9 +22,17 @@ public class LUTLabelUI implements PlugIn, ActionListener {
     private ImagePlus imp;
     Button openButton, saveButton, resizeButton, invertButton;
     ColorPanel colorPanel;
+    FeaturePanelGroundTruth featurePanelGroundTruth;
+    String key;
+
+
+    public LUTLabelUI(FeaturePanelGroundTruth featurePanelGroundTruth, String key) {
+        this.featurePanelGroundTruth = featurePanelGroundTruth;
+        this.key = key;
+    }
 
     public void run(String args) {
-        ImagePlus imp = WindowManager.getCurrentImage();
+        ImagePlus imp = featurePanelGroundTruth.getOverlayImage();
         if (imp==null) {
             IJ.showMessage("LUT Editor", "No images are open");
             return;
@@ -33,7 +41,7 @@ public class LUTLabelUI implements PlugIn, ActionListener {
             IJ.showMessage("LUT Editor", "RGB images do not use LUTs");
             return;
         }
-        colorPanel = new ColorPanel(imp);
+        colorPanel = new ColorPanel(imp, this.featurePanelGroundTruth, key);
         if (colorPanel.getMapSize()!=256) {
             IJ.showMessage("LUT Editor", "LUT must have 256 entries");
             return;
@@ -61,8 +69,10 @@ public class LUTLabelUI implements PlugIn, ActionListener {
         if (gd.wasCanceled()){
             colorPanel.cancelLUT();
             return;
-        } else
+        } else{
             colorPanel.applyLUT();
+        }
+        featurePanelGroundTruth.saveGroundTruthFeatureMetadata();
     }
 
     void save() {

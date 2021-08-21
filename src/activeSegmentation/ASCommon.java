@@ -95,7 +95,7 @@ public interface ASCommon {
 	public static final String EVALUATIONDIR="EVALUATIONDIR";
 	public static final String TESTIMAGESDIR="TESTIMAGESDIR";
 	public static final String TESTFILTERSDIR="TESTFILTERSDIR";
-	
+	public static final String TRAININGLABELSDIR="TRAININGLABELSDIR";
 	/*
 	 *  GUI constants
 	 */
